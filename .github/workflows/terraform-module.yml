@@ -1,0 +1,87 @@
+name: quix-aks module CI/CD
+
+on:
+  push:
+    branches: [ main, dev ]
+    paths:
+      - 'modules/quix-aks/**'
+      - '.github/workflows/terraform-module.yml'
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version bump (patch, minor, major)'
+        required: true
+        default: 'patch'
+        type: choice
+        options: [patch, minor, major]
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validate Terraform
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: modules/quix-aks
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.6.6
+
+      - name: Terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: Terraform init (no backend)
+        run: terraform init -backend=false
+
+      - name: Terraform validate
+        run: terraform validate
+
+      - name: Generate terraform-docs (inject)
+        uses: terraform-docs/gh-actions@v1.3.0
+        with:
+          working-dir: modules/quix-aks
+          output-file: README.md
+          output-method: inject
+          config-file: ''
+          git-push: false
+
+      - name: Check docs are up-to-date
+        run: |
+          git add README.md
+          git diff --cached --quiet || (echo "README.md is outdated. Run terraform-docs to update." && exit 1)
+
+  release:
+    name: Tag release
+    runs-on: ubuntu-latest
+    needs: validate
+    if: github.event_name == 'workflow_dispatch'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create tag (SemVer bump)
+        uses: anothrNick/github-tag-action@1.67.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEFAULT_BUMP: ${{ github.event.inputs.bump }}
+          TAG_PREFIX: 'v'
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
