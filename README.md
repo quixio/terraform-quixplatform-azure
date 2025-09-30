@@ -4,28 +4,28 @@ Repository of production-ready Terraform modules. The primary module is `azure/m
 
 ## Structure
 
-- `azure/modules/quix-aks/` (AKS module)
+- `modules/quix-aks/` (AKS module)
   - `main.tf`: resource group wiring and common locals
   - `network.tf`: VNet, nodes subnet, NAT Gateway and identity
   - `aks.tf`: AKS cluster + dynamic node pools
   - `rbac.tf`: role assignments for the managed identity
   - `bastion.tf`: Azure Bastion + jumpbox (optional)
   - `README.md`: terraform-docs generated documentation
-- `azure/examples/` usage examples
+- `examples/` usage examples
   - `public-quix-infr/`: public cluster
   - `private-quix-infr/`: private cluster with Bastion + jumpbox
-- `azure/BASTION_ACCESS.md`: how to access a private AKS via Bastion
+- `BASTION_ACCESS.md`: how to access a private AKS via Bastion
 
 ## AKS module (quix-aks)
 
 Module documentation (inputs/outputs/resources):
 
-- `azure/modules/quix-aks/README.md` (generated with terraform-docs)
+- [modules/quix-aks/README.md](modules/quix-aks/README.md) (generated with terraform-docs)
 
 Regenerate docs (requires `terraform-docs`):
 
 ```bash
-cd azure/modules/quix-aks
+cd modules/quix-aks
 terraform-docs markdown table --output-file README.md --output-mode inject .
 ```
 
@@ -34,7 +34,7 @@ terraform-docs markdown table --output-file README.md --output-mode inject .
 Public example:
 
 ```bash
-cd azure/examples/public-quix-infr
+cd examples/public-quix-infr
 terraform init
 terraform apply
 ```
@@ -42,12 +42,12 @@ terraform apply
 Private example (with Bastion):
 
 ```bash
-cd azure/examples/private-quix-infr
+cd examples/private-quix-infr
 terraform init
 terraform apply
 ```
 
-Access a private AKS: see `azure/BASTION_ACCESS.md`.
+Access a private AKS: see `BASTION_ACCESS.md`.
 
 ## Requirements
 
