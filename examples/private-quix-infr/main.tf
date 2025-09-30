@@ -20,12 +20,12 @@ resource "azurerm_resource_group" "this" {
 module "aks" {
   source = "../../modules/quix-aks"
 
-  name                = "quix-aks-private"
-  location            = "westeurope"
-  resource_group_name = "rg-quix-private"
-  create_resource_group = false
-  kubernetes_version  = "1.32.4"
-  sku_tier            = "Standard"
+  name                    = "quix-aks-private"
+  location                = "westeurope"
+  resource_group_name     = "rg-quix-private"
+  create_resource_group   = false
+  kubernetes_version      = "1.32.4"
+  sku_tier                = "Standard"
   private_cluster_enabled = true
 
   vnet_name          = "vnet-quix-private"
@@ -40,21 +40,21 @@ module "aks" {
 
   enable_credentials_fetch = true
   node_pools = {
-      default = {
-        name       = "default"
-        type       = "system"
-        node_count = 2
-        vm_size    = "Standard_D4ds_v5"
-      }
-      quix_controller = {
-        name       = "quixcontroller"
-        type       = "user"
-        node_count = 1
-        vm_size    = "Standard_D4ds_v5"
-        taints     = ["dedicated=controller:NoSchedule"]
-        labels     = { role = "controller" }
-      }
+    default = {
+      name       = "default"
+      type       = "system"
+      node_count = 2
+      vm_size    = "Standard_D4ds_v5"
     }
+    quix_controller = {
+      name       = "quixcontroller"
+      type       = "user"
+      node_count = 1
+      vm_size    = "Standard_D4ds_v5"
+      taints     = ["dedicated=controller:NoSchedule"]
+      labels     = { role = "controller" }
+    }
+  }
 
   network_profile = {
     network_plugin_mode = "overlay"
