@@ -45,19 +45,14 @@ jobs:
       - name: Terraform validate
         run: terraform validate
 
-      - name: Generate terraform-docs (inject)
+      - name: Generate terraform-docs (inject & commit)
         uses: terraform-docs/gh-actions@v1.3.0
         with:
           working-dir: modules/quix-aks
           output-file: README.md
           output-method: inject
           config-file: ''
-          git-push: false
-
-      - name: Check docs are up-to-date
-        run: |
-          git add README.md
-          git diff --cached --quiet || (echo "README.md is outdated. Run terraform-docs to update." && exit 1)
+          git-push: true
 
   release:
     name: Tag release
