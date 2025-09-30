@@ -1,0 +1,53 @@
+# Terraform directories and files
+.terraform/
+.terraform/*
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+.terraform.lock.hcl
+
+# Local variable files (never commit secrets)
+terraform.tfvars
+terraform.tfvars.json
+*.tfvars
+
+# Override files (local only)
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Plan files
+*.tfplan
+*.plan
+
+# Terraform CLI config
+.terraformrc
+terraform.rc
+
+# Logs
+*.log
+
+# Editors/IDEs
+.vscode/
+.idea/
+*.iml
+
+# OS files
+.DS_Store
+
+# Common environments
+.env
+.env.*
+
+# Node / frontend (if present)
+node_modules/
+
+# Python virtual envs (if present)
+.venv/
+venv/
+
+# kubeconfig (if generated locally here)
+.kube/
+
