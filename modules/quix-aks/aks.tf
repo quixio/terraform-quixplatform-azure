@@ -3,12 +3,12 @@
 ################################################################################
 
 resource "azurerm_kubernetes_cluster" "this" {
-  name                = var.name
-  location            = local.rg_location
-  resource_group_name = local.rg_name_effective
-  dns_prefix          = "${var.name}-dns"
-  kubernetes_version  = var.kubernetes_version
-  sku_tier            = var.sku_tier
+  name                    = var.name
+  location                = local.rg_location
+  resource_group_name     = local.rg_name_effective
+  dns_prefix              = "${var.name}-dns"
+  kubernetes_version      = var.kubernetes_version
+  sku_tier                = var.sku_tier
   private_cluster_enabled = var.private_cluster_enabled
 
   oidc_issuer_enabled       = var.oidc_issuer_enabled
@@ -53,9 +53,9 @@ resource "azurerm_kubernetes_cluster" "this" {
 }
 
 resource "azurerm_kubernetes_cluster_node_pool" "additional" {
-  for_each              = { for k, p in var.node_pools : k => p if k != (length(local.system_pool_keys) > 0 ? local.system_pool_keys[0] : "__none__") }
+  for_each = { for k, p in var.node_pools : k => p if k != (length(local.system_pool_keys) > 0 ? local.system_pool_keys[0] : "__none__") }
   # Sanitize name: lowercase, alphanum only, start with letter, max 12
-  name                  = substr(
+  name = substr(
     (
       can(regex("^[a-z]", (replace(lower(each.value.name), "[^a-z0-9]", "") != "" ? replace(lower(each.value.name), "[^a-z0-9]", "") : "pool")))
       ? (replace(lower(each.value.name), "[^a-z0-9]", "") != "" ? replace(lower(each.value.name), "[^a-z0-9]", "") : "pool")
@@ -77,7 +77,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "additional" {
     drain_timeout_in_minutes      = 0
     node_soak_duration_in_minutes = 0
   }
-  tags                  = var.tags
+  tags = var.tags
 }
 
 ################################################################################

@@ -10,8 +10,8 @@
 
 | Name | Version |
 |------|---------|
-| <a name="provider_azurerm"></a> [azurerm](#provider\_azurerm) | >= 3.112.0, < 4.0.0 |
-| <a name="provider_null"></a> [null](#provider\_null) | n/a |
+| <a name="provider_azurerm"></a> [azurerm](#provider\_azurerm) | 3.117.1 |
+| <a name="provider_null"></a> [null](#provider\_null) | 3.2.4 |
 
 ## Modules
 
@@ -65,8 +65,8 @@ No modules.
 | <a name="input_name"></a> [name](#input\_name) | Name of the AKS cluster | `string` | n/a | yes |
 | <a name="input_nat_gateway_name"></a> [nat\_gateway\_name](#input\_nat\_gateway\_name) | Name of the NAT Gateway | `string` | n/a | yes |
 | <a name="input_nat_identity_name"></a> [nat\_identity\_name](#input\_nat\_identity\_name) | Name of the managed identity for NAT | `string` | n/a | yes |
-| <a name="input_network_profile"></a> [network\_profile](#input\_network\_profile) | AKS network profile | <pre>object({<br/>    network_plugin_mode = string        # "overlay" or "vnet"<br/>    service_cidr        = string<br/>    dns_service_ip      = string<br/>    pod_cidr            = optional(string)<br/>    network_policy      = optional(string, "calico")<br/>    outbound_type       = optional(string, "userAssignedNATGateway")<br/>  })</pre> | n/a | yes |
-| <a name="input_node_pools"></a> [node\_pools](#input\_node\_pools) | Map of additional node pools (include a 'system' pool to override default) | <pre>map(object({<br/>    name        = string<br/>    type        = string   # system | user<br/>    node_count  = number<br/>    vm_size     = string<br/>    max_pods    = optional(number)<br/>    taints      = optional(list(string))<br/>    labels      = optional(map(string))<br/>    mode        = optional(string) # system | user (overrides type)<br/>  }))</pre> | `{}` | no |
+| <a name="input_network_profile"></a> [network\_profile](#input\_network\_profile) | AKS network profile | <pre>object({<br/>    network_plugin_mode = string # "overlay" or "vnet"<br/>    service_cidr        = string<br/>    dns_service_ip      = string<br/>    pod_cidr            = optional(string)<br/>    network_policy      = optional(string, "calico")<br/>    outbound_type       = optional(string, "userAssignedNATGateway")<br/>  })</pre> | n/a | yes |
+| <a name="input_node_pools"></a> [node\_pools](#input\_node\_pools) | Map of additional node pools (include a 'system' pool to override default) | <pre>map(object({<br/>    name       = string<br/>    type       = string # system | user<br/>    node_count = number<br/>    vm_size    = string<br/>    max_pods   = optional(number)<br/>    taints     = optional(list(string))<br/>    labels     = optional(map(string))<br/>    mode       = optional(string) # system | user (overrides type)<br/>  }))</pre> | `{}` | no |
 | <a name="input_nodes_subnet_cidr"></a> [nodes\_subnet\_cidr](#input\_nodes\_subnet\_cidr) | CIDR for the AKS nodes subnet | `string` | n/a | yes |
 | <a name="input_nodes_subnet_name"></a> [nodes\_subnet\_name](#input\_nodes\_subnet\_name) | Name of the AKS nodes subnet | `string` | n/a | yes |
 | <a name="input_oidc_issuer_enabled"></a> [oidc\_issuer\_enabled](#input\_oidc\_issuer\_enabled) | Enable OIDC issuer | `bool` | `true` | no |

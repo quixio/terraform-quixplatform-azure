@@ -1,6 +1,6 @@
 # Terraform Modules (Azure)
 
-Repository of production-ready Terraform modules. The primary module is `azure/modules/quix-aks` (full AKS with networking, NAT, RBAC, and optional Bastion/jumpbox).
+Repository of production-ready Terraform modules for installing quix-platform.
 
 ## Structure
 
@@ -58,3 +58,53 @@ Access a private AKS: see `BASTION_ACCESS.md`.
 ## Module versioning
 
 Publish SemVer tags and reference the module with `?ref=vX.Y.Z` when consuming from git.
+
+### Using this module from another repo with a Git tag
+
+HTTPS example:
+
+```hcl
+module "quix_aks" {
+  source = "git::https://github.com/quixio/terraform-quixplatform-azure.git//modules/quix-aks?ref=0.0.2"
+
+  name                 = "my-aks"
+  location             = "westeurope"
+  resource_group_name  = "rg-my-aks"
+  create_resource_group = true
+
+  vnet_name          = "vnet-my-aks"
+  vnet_address_space = ["10.240.0.0/16"]
+  nodes_subnet_name  = "Subnet-Nodes"
+  nodes_subnet_cidr  = "10.240.0.0/22"
+
+  nat_identity_name = "my-nat-id"
+  public_ip_name    = "my-nat-ip"
+  nat_gateway_name  = "my-nat"
+  availability_zone = "1"
+
+  kubernetes_version = "1.32.4"
+  network_profile = {
+    network_plugin_mode = "vnet"
+    service_cidr        = "172.22.0.0/16"
+    dns_service_ip      = "172.22.0.10"
+  }
+
+  node_pools = {
+    default = {
+      name       = "default"
+      type       = "system"
+      node_count = 1
+      vm_size    = "Standard_D4ds_v5"
+    }
+  }
+}
+```
+
+SSH example:
+
+```hcl
+module "quix_aks" {
+  source = "git::ssh://git@github.com/quixio/terraform-quixplatform-azure.git//modules/quix-aks?ref=0.0.2"
+  # ...same inputs as above
+}
+```

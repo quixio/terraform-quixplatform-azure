@@ -80,14 +80,14 @@ variable "nodes_subnet_cidr" {
 variable "node_pools" {
   description = "Map of additional node pools (include a 'system' pool to override default)"
   type = map(object({
-    name        = string
-    type        = string   # system | user
-    node_count  = number
-    vm_size     = string
-    max_pods    = optional(number)
-    taints      = optional(list(string))
-    labels      = optional(map(string))
-    mode        = optional(string) # system | user (overrides type)
+    name       = string
+    type       = string # system | user
+    node_count = number
+    vm_size    = string
+    max_pods   = optional(number)
+    taints     = optional(list(string))
+    labels     = optional(map(string))
+    mode       = optional(string) # system | user (overrides type)
   }))
   default = {}
   validation {
@@ -103,7 +103,7 @@ variable "node_pools" {
 variable "network_profile" {
   description = "AKS network profile"
   type = object({
-    network_plugin_mode = string        # "overlay" or "vnet"
+    network_plugin_mode = string # "overlay" or "vnet"
     service_cidr        = string
     dns_service_ip      = string
     pod_cidr            = optional(string)
@@ -111,9 +111,9 @@ variable "network_profile" {
     outbound_type       = optional(string, "userAssignedNATGateway")
   })
   validation {
-  condition     = contains(["overlay", "vnet"], var.network_profile.network_plugin_mode)
-  error_message = "network_profile.network_plugin_mode must be 'overlay' or 'vnet'."
-}
+    condition     = contains(["overlay", "vnet"], var.network_profile.network_plugin_mode)
+    error_message = "network_profile.network_plugin_mode must be 'overlay' or 'vnet'."
+  }
 }
 
 
