@@ -58,7 +58,8 @@ jobs:
     name: Tag release
     runs-on: ubuntu-latest
     needs: validate
-    if: github.event_name == 'workflow_dispatch'
+    # Run on manual dispatch or on push to main
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,7 +70,8 @@ jobs:
         uses: anothrNick/github-tag-action@1.67.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DEFAULT_BUMP: ${{ github.event.inputs.bump }}
+          # Use input if manual dispatch; otherwise default to patch on push
+          DEFAULT_BUMP: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.bump || 'patch' }}
           TAG_PREFIX: 'v'
 
       - name: Create GitHub Release
