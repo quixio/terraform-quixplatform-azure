@@ -6,6 +6,7 @@
 crash.log
 crash.*.log
 .terraform.lock.hcl
+.DS_Store
 
 # Local variable files (never commit secrets)
 terraform.tfvars
