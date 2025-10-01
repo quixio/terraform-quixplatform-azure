@@ -87,6 +87,11 @@ output "cluster_identity_client_id" {
   value       = azurerm_user_assigned_identity.nat_identity.client_id
 }
 
+output "cluster_identity_resource_id" {
+  description = "Resource ID of the cluster's user-assigned identity"
+  value       = azurerm_user_assigned_identity.nat_identity.id
+}
+
 output "nodes_subnet_name" {
   description = "Name of the nodes subnet"
   value       = azurerm_subnet.nodes.name
