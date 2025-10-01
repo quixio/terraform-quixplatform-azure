@@ -88,7 +88,7 @@ module "tiered_storage" {
   cluster_identity_resource_id = module.aks.cluster_identity_resource_id
 
   federated_bindings = [
-    { namespace = "default",   service_account_name = "tiered-storage-sa" },
+    { namespace = "default", service_account_name = "tiered-storage-sa" },
     { namespace = "analytics", service_account_name = "tiered-storage-sa" }
   ]
 

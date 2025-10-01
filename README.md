@@ -11,9 +11,14 @@ Repository of production-ready Terraform modules for installing quix-platform.
   - `rbac.tf`: role assignments for the managed identity
   - `bastion.tf`: Azure Bastion + jumpbox (optional)
   - `README.md`: terraform-docs generated documentation
+- `modules/tiered-storage/` (Tiered Storage module)
+  - `main.tf`: Storage Account, federated identity credentials, role assignment for kubelet identity
+  - `README.md`: terraform-docs generated documentation
 - `examples/` usage examples
   - `public-quix-infr/`: public cluster
   - `private-quix-infr/`: private cluster with Bastion + jumpbox
+  - `public-quix-infr-tiered-storage/`: public cluster + tiered-storage module
+  - `private-quix-infr-external-vnet/`: private cluster using external VNet/Subnets, external NAT (BYO), and Bastion subnet
 - `BASTION_ACCESS.md`: how to access a private AKS via Bastion
 
 ## AKS module (quix-aks)
@@ -26,6 +31,31 @@ Regenerate docs (requires `terraform-docs`):
 
 ```bash
 cd modules/quix-aks
+terraform-docs markdown table --output-file README.md --output-mode inject .
+```
+
+### Bring Your Own NAT (BYO NAT)
+
+You can use an external NAT Gateway instead of creating one:
+
+```hcl
+module "quix_aks" {
+  # ...
+  create_nat     = false
+  nat_gateway_id = azurerm_nat_gateway.external.id
+}
+```
+
+## Tiered Storage module (tiered-storage)
+
+Module documentation (inputs/outputs/resources):
+
+- [modules/tiered-storage/README.md](modules/tiered-storage/README.md) (generated with terraform-docs)
+
+Regenerate docs (requires `terraform-docs`):
+
+```bash
+cd modules/tiered-storage
 terraform-docs markdown table --output-file README.md --output-mode inject .
 ```
 
@@ -43,6 +73,14 @@ Private example (with Bastion):
 
 ```bash
 cd examples/private-quix-infr
+terraform init
+terraform apply
+```
+
+External VNet + external NAT + Bastion subnet example:
+
+```bash
+cd examples/private-quix-infr-external-vnet
 terraform init
 terraform apply
 ```

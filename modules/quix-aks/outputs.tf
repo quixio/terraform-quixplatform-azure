@@ -19,17 +19,18 @@ output "resource_group_location" {
 
 output "vnet_id" {
   description = "ID of the virtual network"
-  value       = azurerm_virtual_network.this.id
+  value       = coalesce(try(azurerm_virtual_network.this[0].id, null), var.vnet_id)
 }
 
 output "nodes_subnet_id" {
   description = "ID of the nodes subnet"
-  value       = azurerm_subnet.nodes.id
+  value       = coalesce(try(azurerm_subnet.nodes[0].id, null), var.nodes_subnet_id)
 }
 
 output "nat_gateway_public_ip" {
   description = "Public IP address of the NAT Gateway"
-  value       = azurerm_public_ip.nat_gateway.ip_address
+  value       = try(azurerm_public_ip.nat_gateway[0].ip_address, null)
+
 }
 
 output "aks_id" {
@@ -94,7 +95,7 @@ output "cluster_identity_resource_id" {
 
 output "nodes_subnet_name" {
   description = "Name of the nodes subnet"
-  value       = azurerm_subnet.nodes.name
+  value       = coalesce(try(azurerm_subnet.nodes[0].name, null), var.nodes_subnet_name)
 }
 
 
