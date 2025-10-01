@@ -3,15 +3,22 @@
 ################################################################################
 
 resource "azurerm_subnet" "bastion" {
-  count                = var.enable_bastion ? 1 : 0
+  count                = var.enable_bastion && var.create_bastion_subnet ? 1 : 0
   name                 = "AzureBastionSubnet"
   resource_group_name  = local.rg_name_effective
-  virtual_network_name = azurerm_virtual_network.this.name
+  virtual_network_name = coalesce(try(azurerm_virtual_network.this[0].name, null), try(data.azurerm_virtual_network.existing[0].name, null), var.vnet_name)
   address_prefixes     = [var.bastion_subnet_cidr]
 }
 
+data "azurerm_subnet" "bastion" {
+  count                = var.enable_bastion && !var.create_bastion_subnet ? 1 : 0
+  name                 = "AzureBastionSubnet"
+  virtual_network_name = var.vnet_name
+  resource_group_name  = local.rg_name_effective
+}
+
 resource "azurerm_public_ip" "bastion" {
-  count               = var.enable_bastion ? 1 : 0
+  count               = var.enable_bastion && (var.bastion_public_ip_id == null) ? 1 : 0
   name                = var.bastion_public_ip_name
   location            = local.rg_location
   resource_group_name = local.rg_name_effective
@@ -31,8 +38,8 @@ resource "azurerm_bastion_host" "this" {
 
   ip_configuration {
     name                 = "configuration"
-    subnet_id            = azurerm_subnet.bastion[0].id
-    public_ip_address_id = azurerm_public_ip.bastion[0].id
+    subnet_id            = coalesce(try(azurerm_subnet.bastion[0].id, null), try(data.azurerm_subnet.bastion[0].id, null), var.bastion_subnet_id)
+    public_ip_address_id = coalesce(try(azurerm_public_ip.bastion[0].id, null), var.bastion_public_ip_id)
   }
 
   tags = var.tags
@@ -46,7 +53,7 @@ resource "azurerm_network_interface" "jumpbox" {
 
   ip_configuration {
     name                          = "ipconfig1"
-    subnet_id                     = azurerm_subnet.nodes.id
+    subnet_id                     = coalesce(try(azurerm_subnet.nodes[0].id, null), data.azurerm_subnet.nodes[0].id, var.nodes_subnet_id)
     private_ip_address_allocation = "Dynamic"
   }
 

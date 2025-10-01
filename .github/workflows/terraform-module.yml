@@ -5,6 +5,7 @@ on:
     branches: [ main, dev ]
     paths:
       - 'modules/quix-aks/**'
+      - 'modules/tiered-storage/**'
       - '.github/workflows/terraform-module.yml'
   workflow_dispatch:
     inputs:
@@ -24,7 +25,11 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: modules/quix-aks
+        working-directory: ${{ matrix.module }}
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [ 'modules/quix-aks', 'modules/tiered-storage' ]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -48,7 +53,7 @@ jobs:
       - name: Generate terraform-docs (inject & commit)
         uses: terraform-docs/gh-actions@v1.3.0
         with:
-          working-dir: modules/quix-aks
+          working-dir: ${{ matrix.module }}
           output-file: README.md
           output-method: inject
           config-file: ''

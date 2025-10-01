@@ -77,6 +77,30 @@ variable "nodes_subnet_cidr" {
   type        = string
 }
 
+variable "vnet_id" {
+  description = "Existing VNet ID to reuse (skip VNet creation when set)"
+  type        = string
+  default     = null
+}
+
+variable "nodes_subnet_id" {
+  description = "Existing nodes subnet ID to reuse (skip subnet creation when set)"
+  type        = string
+  default     = null
+}
+
+variable "create_vnet" {
+  description = "Whether to create the VNet (set false when using external vnet_id)"
+  type        = bool
+  default     = true
+}
+
+variable "create_nodes_subnet" {
+  description = "Whether to create the nodes subnet (set false when using external nodes_subnet_id)"
+  type        = bool
+  default     = true
+}
+
 variable "node_pools" {
   description = "Map of additional node pools (include a 'system' pool to override default)"
   type = map(object({
@@ -137,6 +161,18 @@ variable "nat_gateway_name" {
   type        = string
 }
 
+variable "create_nat" {
+  description = "Whether to create NAT Gateway and its Public IP (set false to bring your own)"
+  type        = bool
+  default     = true
+}
+
+variable "nat_gateway_id" {
+  description = "Existing NAT Gateway ID to associate when create_nat is false"
+  type        = string
+  default     = null
+}
+
 variable "availability_zone" {
   description = "Availability zone for public IP"
   type        = string
@@ -174,6 +210,24 @@ variable "bastion_public_ip_name" {
   description = "Name of the Public IP for Azure Bastion"
   type        = string
   default     = "QuixBastionIP"
+}
+
+variable "bastion_subnet_id" {
+  description = "Existing AzureBastionSubnet ID to reuse (skip subnet creation when set)"
+  type        = string
+  default     = null
+}
+
+variable "bastion_public_ip_id" {
+  description = "Existing Bastion Public IP ID to reuse (skip public IP creation when set)"
+  type        = string
+  default     = null
+}
+
+variable "create_bastion_subnet" {
+  description = "Whether to create AzureBastionSubnet (set false when supplying bastion_subnet_id)"
+  type        = bool
+  default     = true
 }
 
 variable "jumpbox_name" {
