@@ -10,7 +10,7 @@ resource "azurerm_subnet" "bastion" {
   address_prefixes     = [var.bastion_subnet_cidr]
 }
 
-data "azurerm_subnet" "bastion" {
+data "azurerm_subnet" "existing_bastion" {
   count                = var.enable_bastion && !var.create_bastion_subnet ? 1 : 0
   name                 = "AzureBastionSubnet"
   virtual_network_name = var.vnet_name
@@ -38,7 +38,7 @@ resource "azurerm_bastion_host" "this" {
 
   ip_configuration {
     name                 = "configuration"
-    subnet_id            = coalesce(try(azurerm_subnet.bastion[0].id, null), try(data.azurerm_subnet.bastion[0].id, null), var.bastion_subnet_id)
+    subnet_id            = coalesce(try(azurerm_subnet.bastion[0].id, null), data.azurerm_subnet.existing_bastion[0].id)
     public_ip_address_id = coalesce(try(azurerm_public_ip.bastion[0].id, null), var.bastion_public_ip_id)
   }
 
@@ -53,7 +53,7 @@ resource "azurerm_network_interface" "jumpbox" {
 
   ip_configuration {
     name                          = "ipconfig1"
-    subnet_id                     = coalesce(try(azurerm_subnet.nodes[0].id, null), data.azurerm_subnet.nodes[0].id, var.nodes_subnet_id)
+    subnet_id                     = coalesce(try(azurerm_subnet.nodes[0].id, null),  data.azurerm_subnet.existing[0].id)
     private_ip_address_allocation = "Dynamic"
   }
 

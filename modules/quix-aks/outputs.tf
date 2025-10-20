@@ -19,12 +19,12 @@ output "resource_group_location" {
 
 output "vnet_id" {
   description = "ID of the virtual network"
-  value       = coalesce(try(azurerm_virtual_network.this[0].id, null), var.vnet_id)
+  value       = coalesce(try(azurerm_virtual_network.this[0].id, null), data.azurerm_virtual_network.existing[0].id)
 }
 
 output "nodes_subnet_id" {
   description = "ID of the nodes subnet"
-  value       = coalesce(try(azurerm_subnet.nodes[0].id, null), var.nodes_subnet_id)
+  value       = coalesce(try(azurerm_subnet.nodes[0].id, null), data.azurerm_subnet.existing[0].id)
 }
 
 output "nat_gateway_public_ip" {

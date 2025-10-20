@@ -60,34 +60,38 @@ variable "workload_identity_enabled" {
 variable "vnet_name" {
   description = "Name of the Virtual Network"
   type        = string
+  default     = null
 }
 
 variable "vnet_address_space" {
   description = "Address space for the Virtual Network"
   type        = list(string)
+  default     = null
 }
 
 variable "nodes_subnet_name" {
   description = "Name of the AKS nodes subnet"
   type        = string
+  default     = null
 }
 
 variable "nodes_subnet_cidr" {
   description = "CIDR for the AKS nodes subnet"
   type        = string
-}
-
-variable "vnet_id" {
-  description = "Existing VNet ID to reuse (skip VNet creation when set)"
-  type        = string
   default     = null
 }
 
-variable "nodes_subnet_id" {
-  description = "Existing nodes subnet ID to reuse (skip subnet creation when set)"
-  type        = string
-  default     = null
-}
+# variable "vnet_id" {
+#   description = "Existing VNet ID to reuse (skip VNet creation when set)"
+#   type        = string
+#   default     = null
+# }
+
+# variable "nodes_subnet_id" {
+#   description = "Existing nodes subnet ID to reuse (skip subnet creation when set)"
+#   type        = string
+#   default     = null
+# }
 
 variable "create_vnet" {
   description = "Whether to create the VNet (set false when using external vnet_id)"
