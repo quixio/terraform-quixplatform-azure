@@ -39,7 +39,7 @@ data "azurerm_subnet" "existing" {
 }
 
 resource "azurerm_user_assigned_identity" "nat_identity" {
-  name                = var.nat_identity_name
+  name                = var.identity_name
   location            = local.rg_location
   resource_group_name = local.rg_name_effective
   tags                = var.tags

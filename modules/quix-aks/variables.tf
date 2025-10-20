@@ -145,19 +145,21 @@ variable "network_profile" {
 # NAT Gateway and Identity
 ################################################################################
 
-variable "nat_identity_name" {
-  description = "Name of the managed identity for NAT"
+variable "identity_name" {
+  description = "Name of the user-assigned managed identity for the AKS cluster"
   type        = string
 }
 
 variable "public_ip_name" {
   description = "Name of the public IP for NAT Gateway"
   type        = string
+  default     = null
 }
 
 variable "nat_gateway_name" {
   description = "Name of the NAT Gateway"
   type        = string
+  default     = null
 }
 
 variable "create_nat" {
