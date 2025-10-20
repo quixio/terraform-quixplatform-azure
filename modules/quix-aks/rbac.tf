@@ -11,7 +11,7 @@ data "azurerm_role_definition" "contributor" {
 }
 
 resource "azurerm_role_assignment" "aks_vnet" {
-  scope              = coalesce(try(azurerm_virtual_network.this[0].id, null), data.azurerm_subnet.existing[0].id)
+  scope              = coalesce(try(azurerm_virtual_network.this[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
   role_definition_id = data.azurerm_role_definition.network_contributor.id
   principal_id       = azurerm_user_assigned_identity.nat_identity.principal_id
 
@@ -23,7 +23,7 @@ resource "azurerm_role_assignment" "aks_vnet" {
 }
 
 resource "azurerm_role_assignment" "aks_nodes_subnet" {
-  scope              = coalesce(try(azurerm_subnet.nodes[0].id, null), data.azurerm_subnet.existing[0].id)
+  scope              = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
   role_definition_id = data.azurerm_role_definition.network_contributor.id
   principal_id       = azurerm_user_assigned_identity.nat_identity.principal_id
 

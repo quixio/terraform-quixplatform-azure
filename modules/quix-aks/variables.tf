@@ -69,6 +69,12 @@ variable "vnet_address_space" {
   default     = null
 }
 
+variable "vnet_resource_group" {
+  description = "Resource group name where the VNet (and its subnets) reside. Defaults to module RG when null"
+  type        = string
+  default     = null
+}
+
 variable "nodes_subnet_name" {
   description = "Name of the AKS nodes subnet"
   type        = string
@@ -81,17 +87,6 @@ variable "nodes_subnet_cidr" {
   default     = null
 }
 
-# variable "vnet_id" {
-#   description = "Existing VNet ID to reuse (skip VNet creation when set)"
-#   type        = string
-#   default     = null
-# }
-
-# variable "nodes_subnet_id" {
-#   description = "Existing nodes subnet ID to reuse (skip subnet creation when set)"
-#   type        = string
-#   default     = null
-# }
 
 variable "create_vnet" {
   description = "Whether to create the VNet (set false when using external vnet_id)"
@@ -216,11 +211,6 @@ variable "bastion_public_ip_name" {
   default     = "QuixBastionIP"
 }
 
-variable "bastion_subnet_id" {
-  description = "Existing AzureBastionSubnet ID to reuse (skip subnet creation when set)"
-  type        = string
-  default     = null
-}
 
 variable "bastion_public_ip_id" {
   description = "Existing Bastion Public IP ID to reuse (skip public IP creation when set)"
