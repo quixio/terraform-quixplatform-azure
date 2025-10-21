@@ -27,7 +27,7 @@ module "aks" {
   nodes_subnet_name  = "Subnet-Nodes"
   nodes_subnet_cidr  = "10.240.0.0/22"
 
-  nat_identity_name = "quix-public-nat-id"
+  identity_name     = "quix-public-nat-id"
   public_ip_name    = "quix-public-nat-ip"
   nat_gateway_name  = "quix-public-nat"
   availability_zone = "1"
