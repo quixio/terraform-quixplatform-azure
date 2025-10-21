@@ -32,6 +32,7 @@ No modules.
 | [azurerm_public_ip.nat_gateway](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/public_ip) | resource |
 | [azurerm_resource_group.this](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/resource_group) | resource |
 | [azurerm_role_assignment.aks_nodes_subnet](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
+| [azurerm_role_assignment.aks_private_dns_zone](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_role_assignment.aks_rg](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_role_assignment.aks_vnet](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/role_assignment) | resource |
 | [azurerm_subnet.bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/resources/subnet) | resource |
@@ -43,8 +44,9 @@ No modules.
 | [azurerm_resource_group.existing](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/resource_group) | data source |
 | [azurerm_role_definition.contributor](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/role_definition) | data source |
 | [azurerm_role_definition.network_contributor](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/role_definition) | data source |
-| [azurerm_subnet.bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/subnet) | data source |
-| [azurerm_subnet.nodes](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/subnet) | data source |
+| [azurerm_role_definition.private_dns_zone_contributor](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/role_definition) | data source |
+| [azurerm_subnet.existing](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/subnet) | data source |
+| [azurerm_subnet.existing_bastion](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/subnet) | data source |
 | [azurerm_virtual_network.existing](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/virtual_network) | data source |
 
 ## Inputs
@@ -57,7 +59,6 @@ No modules.
 | <a name="input_bastion_public_ip_id"></a> [bastion\_public\_ip\_id](#input\_bastion\_public\_ip\_id) | Existing Bastion Public IP ID to reuse (skip public IP creation when set) | `string` | `null` | no |
 | <a name="input_bastion_public_ip_name"></a> [bastion\_public\_ip\_name](#input\_bastion\_public\_ip\_name) | Name of the Public IP for Azure Bastion | `string` | `"QuixBastionIP"` | no |
 | <a name="input_bastion_subnet_cidr"></a> [bastion\_subnet\_cidr](#input\_bastion\_subnet\_cidr) | CIDR for AzureBastionSubnet | `string` | `"10.0.64.0/27"` | no |
-| <a name="input_bastion_subnet_id"></a> [bastion\_subnet\_id](#input\_bastion\_subnet\_id) | Existing AzureBastionSubnet ID to reuse (skip subnet creation when set) | `string` | `null` | no |
 | <a name="input_create_bastion_subnet"></a> [create\_bastion\_subnet](#input\_create\_bastion\_subnet) | Whether to create AzureBastionSubnet (set false when supplying bastion\_subnet\_id) | `bool` | `true` | no |
 | <a name="input_create_nat"></a> [create\_nat](#input\_create\_nat) | Whether to create NAT Gateway and its Public IP (set false to bring your own) | `bool` | `true` | no |
 | <a name="input_create_nodes_subnet"></a> [create\_nodes\_subnet](#input\_create\_nodes\_subnet) | Whether to create the nodes subnet (set false when using external nodes\_subnet\_id) | `bool` | `true` | no |
@@ -65,6 +66,7 @@ No modules.
 | <a name="input_create_vnet"></a> [create\_vnet](#input\_create\_vnet) | Whether to create the VNet (set false when using external vnet\_id) | `bool` | `true` | no |
 | <a name="input_enable_bastion"></a> [enable\_bastion](#input\_enable\_bastion) | Deploy Azure Bastion and its required subnet | `bool` | `false` | no |
 | <a name="input_enable_credentials_fetch"></a> [enable\_credentials\_fetch](#input\_enable\_credentials\_fetch) | Run az aks get-credentials after creating the cluster | `bool` | `false` | no |
+| <a name="input_identity_name"></a> [identity\_name](#input\_identity\_name) | Name of the user-assigned managed identity for the AKS cluster | `string` | n/a | yes |
 | <a name="input_jumpbox_admin_username"></a> [jumpbox\_admin\_username](#input\_jumpbox\_admin\_username) | Admin username for the jumpbox | `string` | `"azureuser"` | no |
 | <a name="input_jumpbox_name"></a> [jumpbox\_name](#input\_jumpbox\_name) | Name of the jumpbox VM | `string` | `"quix-jumpbox"` | no |
 | <a name="input_jumpbox_ssh_public_key"></a> [jumpbox\_ssh\_public\_key](#input\_jumpbox\_ssh\_public\_key) | SSH public key for the jumpbox admin user | `string` | `""` | no |
@@ -73,22 +75,21 @@ No modules.
 | <a name="input_location"></a> [location](#input\_location) | Azure region | `string` | n/a | yes |
 | <a name="input_name"></a> [name](#input\_name) | Name of the AKS cluster | `string` | n/a | yes |
 | <a name="input_nat_gateway_id"></a> [nat\_gateway\_id](#input\_nat\_gateway\_id) | Existing NAT Gateway ID to associate when create\_nat is false | `string` | `null` | no |
-| <a name="input_nat_gateway_name"></a> [nat\_gateway\_name](#input\_nat\_gateway\_name) | Name of the NAT Gateway | `string` | n/a | yes |
-| <a name="input_identity_name"></a> [identity_name](#input_identity_name) | Name of the user-assigned managed identity for the AKS cluster | `string` | n/a | yes |
+| <a name="input_nat_gateway_name"></a> [nat\_gateway\_name](#input\_nat\_gateway\_name) | Name of the NAT Gateway | `string` | `null` | no |
 | <a name="input_network_profile"></a> [network\_profile](#input\_network\_profile) | AKS network profile | <pre>object({<br/>    network_plugin_mode = string # "overlay" or "vnet"<br/>    service_cidr        = string<br/>    dns_service_ip      = string<br/>    pod_cidr            = optional(string)<br/>    network_policy      = optional(string, "calico")<br/>    outbound_type       = optional(string, "userAssignedNATGateway")<br/>  })</pre> | n/a | yes |
 | <a name="input_node_pools"></a> [node\_pools](#input\_node\_pools) | Map of additional node pools (include a 'system' pool to override default) | <pre>map(object({<br/>    name       = string<br/>    type       = string # system | user<br/>    node_count = number<br/>    vm_size    = string<br/>    max_pods   = optional(number)<br/>    taints     = optional(list(string))<br/>    labels     = optional(map(string))<br/>    mode       = optional(string) # system | user (overrides type)<br/>  }))</pre> | `{}` | no |
-| <a name="input_nodes_subnet_cidr"></a> [nodes\_subnet\_cidr](#input\_nodes\_subnet\_cidr) | CIDR for the AKS nodes subnet | `string` | n/a | yes |
-| <a name="input_nodes_subnet_id"></a> [nodes\_subnet\_id](#input\_nodes\_subnet\_id) | Existing nodes subnet ID to reuse (skip subnet creation when set) | `string` | `null` | no |
-| <a name="input_nodes_subnet_name"></a> [nodes\_subnet\_name](#input\_nodes\_subnet\_name) | Name of the AKS nodes subnet | `string` | n/a | yes |
+| <a name="input_nodes_subnet_cidr"></a> [nodes\_subnet\_cidr](#input\_nodes\_subnet\_cidr) | CIDR for the AKS nodes subnet | `string` | `null` | no |
+| <a name="input_nodes_subnet_name"></a> [nodes\_subnet\_name](#input\_nodes\_subnet\_name) | Name of the AKS nodes subnet | `string` | `null` | no |
 | <a name="input_oidc_issuer_enabled"></a> [oidc\_issuer\_enabled](#input\_oidc\_issuer\_enabled) | Enable OIDC issuer | `bool` | `true` | no |
 | <a name="input_private_cluster_enabled"></a> [private\_cluster\_enabled](#input\_private\_cluster\_enabled) | Enable AKS private cluster | `bool` | `false` | no |
-| <a name="input_public_ip_name"></a> [public\_ip\_name](#input\_public\_ip\_name) | Name of the public IP for NAT Gateway | `string` | n/a | yes |
+| <a name="input_private_dns_zone_id"></a> [private\_dns\_zone\_id](#input\_private\_dns\_zone\_id) | Private DNS Zone to use for AKS API server when private cluster is enabled. Accepts "System", "None", or a Private DNS Zone resource ID. | `string` | `"System"` | no |
+| <a name="input_public_ip_name"></a> [public\_ip\_name](#input\_public\_ip\_name) | Name of the public IP for NAT Gateway | `string` | `null` | no |
 | <a name="input_resource_group_name"></a> [resource\_group\_name](#input\_resource\_group\_name) | Resource group name (existing or to be created) | `string` | n/a | yes |
 | <a name="input_sku_tier"></a> [sku\_tier](#input\_sku\_tier) | AKS tier (Free or Standard) | `string` | `"Standard"` | no |
 | <a name="input_tags"></a> [tags](#input\_tags) | Tags to apply to resources | `map(string)` | `{}` | no |
-| <a name="input_vnet_address_space"></a> [vnet\_address\_space](#input\_vnet\_address\_space) | Address space for the Virtual Network | `list(string)` | n/a | yes |
-| <a name="input_vnet_id"></a> [vnet\_id](#input\_vnet\_id) | Existing VNet ID to reuse (skip VNet creation when set) | `string` | `null` | no |
-| <a name="input_vnet_name"></a> [vnet\_name](#input\_vnet\_name) | Name of the Virtual Network | `string` | n/a | yes |
+| <a name="input_vnet_address_space"></a> [vnet\_address\_space](#input\_vnet\_address\_space) | Address space for the Virtual Network | `list(string)` | `null` | no |
+| <a name="input_vnet_name"></a> [vnet\_name](#input\_vnet\_name) | Name of the Virtual Network | `string` | `null` | no |
+| <a name="input_vnet_resource_group"></a> [vnet\_resource\_group](#input\_vnet\_resource\_group) | Resource group name where the VNet (and its subnets) reside. Defaults to module RG when null | `string` | `null` | no |
 | <a name="input_workload_identity_enabled"></a> [workload\_identity\_enabled](#input\_workload\_identity\_enabled) | Enable workload identity | `bool` | `true` | no |
 
 ## Outputs
