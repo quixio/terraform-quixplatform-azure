@@ -10,6 +10,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   kubernetes_version      = var.kubernetes_version
   sku_tier                = var.sku_tier
   private_cluster_enabled = var.private_cluster_enabled
+  private_dns_zone_id     = var.private_cluster_enabled ? var.private_dns_zone_id : null
 
   oidc_issuer_enabled       = var.oidc_issuer_enabled
   workload_identity_enabled = var.workload_identity_enabled

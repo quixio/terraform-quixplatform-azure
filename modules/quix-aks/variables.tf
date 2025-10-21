@@ -41,6 +41,12 @@ variable "private_cluster_enabled" {
   default     = false
 }
 
+variable "private_dns_zone_id" {
+  description = "Private DNS Zone to use for AKS API server when private cluster is enabled. Accepts \"System\", \"None\", or a Private DNS Zone resource ID."
+  type        = string
+  default     = "System"
+}
+
 variable "oidc_issuer_enabled" {
   description = "Enable OIDC issuer"
   type        = bool
