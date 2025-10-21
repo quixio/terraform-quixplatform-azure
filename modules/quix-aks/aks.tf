@@ -10,6 +10,7 @@ resource "azurerm_kubernetes_cluster" "this" {
   kubernetes_version      = var.kubernetes_version
   sku_tier                = var.sku_tier
   private_cluster_enabled = var.private_cluster_enabled
+  private_dns_zone_id     = var.private_cluster_enabled ? var.private_dns_zone_id : null
 
   oidc_issuer_enabled       = var.oidc_issuer_enabled
   workload_identity_enabled = var.workload_identity_enabled
@@ -18,7 +19,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     name           = local.system_pool_name
     node_count     = local.system_pool.node_count
     vm_size        = local.system_pool.vm_size
-    vnet_subnet_id = coalesce(try(azurerm_subnet.nodes[0].id, null), var.nodes_subnet_id)
+    vnet_subnet_id = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
 
     upgrade_settings {
       max_surge                     = "10%"
@@ -67,7 +68,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "additional" {
   kubernetes_cluster_id = azurerm_kubernetes_cluster.this.id
   vm_size               = each.value.vm_size
   node_count            = each.value.node_count
-  vnet_subnet_id        = coalesce(try(azurerm_subnet.nodes[0].id, null), var.nodes_subnet_id)
+  vnet_subnet_id        = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
   mode                  = lower(coalesce(each.value.mode, each.value.type)) == "system" ? "System" : "User"
   node_taints           = coalesce(each.value.taints, null)
   orchestrator_version  = var.kubernetes_version

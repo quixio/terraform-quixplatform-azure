@@ -41,6 +41,12 @@ variable "private_cluster_enabled" {
   default     = false
 }
 
+variable "private_dns_zone_id" {
+  description = "Private DNS Zone to use for AKS API server when private cluster is enabled. Accepts \"System\", \"None\", or a Private DNS Zone resource ID."
+  type        = string
+  default     = "System"
+}
+
 variable "oidc_issuer_enabled" {
   description = "Enable OIDC issuer"
   type        = bool
@@ -60,34 +66,33 @@ variable "workload_identity_enabled" {
 variable "vnet_name" {
   description = "Name of the Virtual Network"
   type        = string
+  default     = null
 }
 
 variable "vnet_address_space" {
   description = "Address space for the Virtual Network"
   type        = list(string)
+  default     = null
+}
+
+variable "vnet_resource_group" {
+  description = "Resource group name where the VNet (and its subnets) reside. Defaults to module RG when null"
+  type        = string
+  default     = null
 }
 
 variable "nodes_subnet_name" {
   description = "Name of the AKS nodes subnet"
   type        = string
+  default     = null
 }
 
 variable "nodes_subnet_cidr" {
   description = "CIDR for the AKS nodes subnet"
   type        = string
-}
-
-variable "vnet_id" {
-  description = "Existing VNet ID to reuse (skip VNet creation when set)"
-  type        = string
   default     = null
 }
 
-variable "nodes_subnet_id" {
-  description = "Existing nodes subnet ID to reuse (skip subnet creation when set)"
-  type        = string
-  default     = null
-}
 
 variable "create_vnet" {
   description = "Whether to create the VNet (set false when using external vnet_id)"
@@ -146,19 +151,21 @@ variable "network_profile" {
 # NAT Gateway and Identity
 ################################################################################
 
-variable "nat_identity_name" {
-  description = "Name of the managed identity for NAT"
+variable "identity_name" {
+  description = "Name of the user-assigned managed identity for the AKS cluster"
   type        = string
 }
 
 variable "public_ip_name" {
   description = "Name of the public IP for NAT Gateway"
   type        = string
+  default     = null
 }
 
 variable "nat_gateway_name" {
   description = "Name of the NAT Gateway"
   type        = string
+  default     = null
 }
 
 variable "create_nat" {
@@ -212,11 +219,6 @@ variable "bastion_public_ip_name" {
   default     = "QuixBastionIP"
 }
 
-variable "bastion_subnet_id" {
-  description = "Existing AzureBastionSubnet ID to reuse (skip subnet creation when set)"
-  type        = string
-  default     = null
-}
 
 variable "bastion_public_ip_id" {
   description = "Existing Bastion Public IP ID to reuse (skip public IP creation when set)"
