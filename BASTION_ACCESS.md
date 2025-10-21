@@ -9,32 +9,9 @@ This guide shows how to connect to a private AKS cluster using Azure Bastion, ei
 - Azure CLI installed locally
 - Your SSH private key corresponding to jumpbox_ssh_public_key
 
-## Option A: Run kubectl from the Jumpbox
 
-1. Open an SSH session to the jumpbox via Bastion (Native client):
-```bash
-export RG="<RESOURCE_GROUP>"
-export BASTION="<BASTION_NAME>"
-export VM="<JUMPBOX_NAME>"
-export SSH_KEY="$HOME/.ssh/id_rsa"
 
-VM_ID=$(az vm show -g "$RG" -n "$VM" --query id -o tsv)
-az network bastion ssh \
-  --name "$BASTION" \
-  --resource-group "$RG" \
-  --target-resource-id "$VM_ID" \
-  --auth-type ssh-key --username <ADMIN_USERNAME> --ssh-key $SSH_KEY
-```
-
-2. Inside the VM, authenticate and fetch kubeconfig:
-```bash
-az login --use-device-code
-az account set --subscription "<SUBSCRIPTION_ID>"
-az aks get-credentials -g "<RESOURCE_GROUP>" -n "<AKS_NAME>" --overwrite-existing
-kubectl get nodes -o wide
-```
-
-## Option B: Run kubectl from your local machine (Bastion tunneling)
+## Run kubectl from your local machine (Bastion tunneling)
 
 1. Start SSH tunnel to the VM via Bastion:
 ```bash

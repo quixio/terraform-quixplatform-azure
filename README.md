@@ -46,6 +46,28 @@ module "quix_aks" {
 }
 ```
 
+### Private DNS Zone for Private Clusters
+
+When deploying a private AKS cluster, you can control how the Private DNS Zone is managed using the `private_dns_zone_id` variable:
+
+```hcl
+module "quix_aks" {
+  # ...
+  private_cluster_enabled = true
+  
+  # Option 1: Let AKS manage the Private DNS Zone automatically (default)
+  private_dns_zone_id = "System"
+  
+  # Option 2: Disable Private DNS Zone management (manual DNS configuration required)
+  # private_dns_zone_id = "None"
+  
+  # Option 3: Use an existing Private DNS Zone (BYO)
+  # private_dns_zone_id = "/subscriptions/<sub-id>/resourceGroups/<rg>/providers/Microsoft.Network/privateDnsZones/privatelink.<region>.azmk8s.io"
+}
+```
+
+**Note:** When using an existing Private DNS Zone (Option 3), the module automatically assigns the `Private DNS Zone Contributor` role to the AKS cluster identity.
+
 ## Tiered Storage module (tiered-storage)
 
 Module documentation (inputs/outputs/resources):
@@ -115,7 +137,7 @@ module "quix_aks" {
   nodes_subnet_name  = "Subnet-Nodes"
   nodes_subnet_cidr  = "10.240.0.0/22"
 
-  nat_identity_name = "my-nat-id"
+  identity_name = "my-nat-id"
   public_ip_name    = "my-nat-ip"
   nat_gateway_name  = "my-nat"
   availability_zone = "1"

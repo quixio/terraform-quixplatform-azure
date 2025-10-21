@@ -79,16 +79,10 @@ module "aks" {
   sku_tier                = "Standard"
   private_cluster_enabled = true
 
-  vnet_name          = "vnet-quix-private"
-  vnet_address_space = ["10.240.0.0/16"]
-  nodes_subnet_name  = "Subnet-Nodes"
-  nodes_subnet_cidr  = "10.240.0.0/22"
+  vnet_name          = azurerm_virtual_network.ext.name
+  nodes_subnet_name  = azurerm_subnet.nodes_ext.name
 
-  # Reuse external VNet/Subnets
-  vnet_id         = azurerm_virtual_network.ext.id
-  nodes_subnet_id = azurerm_subnet.nodes_ext.id
-
-  nat_identity_name = "quix-private-nat-id"
+  identity_name     = "quix-private-nat-id"
   public_ip_name    = "quix-private-nat-ip"
   nat_gateway_name  = "quix-private-nat"
   availability_zone = "2"
@@ -117,8 +111,6 @@ module "aks" {
   create_bastion_subnet = false
   enable_bastion        = true
   bastion_name          = "quix-bastion"
-  # Reuse external Bastion subnet & IP
-  bastion_subnet_id = azurerm_subnet.bastion_ext.id
 
   jumpbox_name           = "quix-jumpbox"
   jumpbox_vm_size        = "Standard_B2s"
