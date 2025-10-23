@@ -3,14 +3,15 @@
 ################################################################################
 
 resource "azurerm_kubernetes_cluster" "this" {
-  name                    = var.name
-  location                = local.rg_location
-  resource_group_name     = local.rg_name_effective
-  dns_prefix              = "${var.name}-dns"
-  kubernetes_version      = var.kubernetes_version
-  sku_tier                = var.sku_tier
-  private_cluster_enabled = var.private_cluster_enabled
-  private_dns_zone_id     = var.private_cluster_enabled ? var.private_dns_zone_id : null
+  name                       = var.name
+  location                   = local.rg_location
+  resource_group_name        = local.rg_name_effective
+  dns_prefix                 = var.private_cluster_enabled ? null : "${var.name}-dns"
+  dns_prefix_private_cluster = var.private_cluster_enabled ? coalesce(var.private_dns_prefix, "${var.name}-dns") : null
+  kubernetes_version         = var.kubernetes_version
+  sku_tier                   = var.sku_tier
+  private_cluster_enabled    = var.private_cluster_enabled
+  private_dns_zone_id        = var.private_cluster_enabled ? var.private_dns_zone_id : null
 
   oidc_issuer_enabled       = var.oidc_issuer_enabled
   workload_identity_enabled = var.workload_identity_enabled
