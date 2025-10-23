@@ -54,7 +54,7 @@ No modules.
 | Name | Description | Type | Default | Required |
 |------|-------------|------|---------|:--------:|
 | <a name="input_attach_identity_ids"></a> [attach\_identity\_ids](#input\_attach\_identity\_ids) | Additional user-assigned identity IDs to attach to the cluster | `list(string)` | `[]` | no |
-| <a name="input_availability_zone"></a> [availability\_zone](#input\_availability\_zone) | Availability zone for public IP | `string` | n/a | yes |
+| <a name="input_availability_zone"></a> [availability\_zone](#input\_availability\_zone) | Availability zone for public IP (required only when create\_nat is true) | `string` | `null` | no |
 | <a name="input_bastion_name"></a> [bastion\_name](#input\_bastion\_name) | Name of the Azure Bastion resource | `string` | `"QuixBastion"` | no |
 | <a name="input_bastion_public_ip_id"></a> [bastion\_public\_ip\_id](#input\_bastion\_public\_ip\_id) | Existing Bastion Public IP ID to reuse (skip public IP creation when set) | `string` | `null` | no |
 | <a name="input_bastion_public_ip_name"></a> [bastion\_public\_ip\_name](#input\_bastion\_public\_ip\_name) | Name of the Public IP for Azure Bastion | `string` | `"QuixBastionIP"` | no |
@@ -82,6 +82,7 @@ No modules.
 | <a name="input_nodes_subnet_name"></a> [nodes\_subnet\_name](#input\_nodes\_subnet\_name) | Name of the AKS nodes subnet | `string` | `null` | no |
 | <a name="input_oidc_issuer_enabled"></a> [oidc\_issuer\_enabled](#input\_oidc\_issuer\_enabled) | Enable OIDC issuer | `bool` | `true` | no |
 | <a name="input_private_cluster_enabled"></a> [private\_cluster\_enabled](#input\_private\_cluster\_enabled) | Enable AKS private cluster | `bool` | `false` | no |
+| <a name="input_private_dns_prefix"></a> [private\_dns\_prefix](#input\_private\_dns\_prefix) | Custom DNS prefix for private cluster. Only used when private\_cluster\_enabled is true and private\_dns\_zone\_id is set to a custom zone ID. If null, uses the cluster name. | `string` | `null` | no |
 | <a name="input_private_dns_zone_id"></a> [private\_dns\_zone\_id](#input\_private\_dns\_zone\_id) | Private DNS Zone to use for AKS API server when private cluster is enabled. Accepts "System", "None", or a Private DNS Zone resource ID. | `string` | `"System"` | no |
 | <a name="input_public_ip_name"></a> [public\_ip\_name](#input\_public\_ip\_name) | Name of the public IP for NAT Gateway | `string` | `null` | no |
 | <a name="input_resource_group_name"></a> [resource\_group\_name](#input\_resource\_group\_name) | Resource group name (existing or to be created) | `string` | n/a | yes |
