@@ -79,8 +79,8 @@ module "aks" {
   sku_tier                = "Standard"
   private_cluster_enabled = true
 
-  vnet_name          = azurerm_virtual_network.ext.name
-  nodes_subnet_name  = azurerm_subnet.nodes_ext.name
+  vnet_name         = azurerm_virtual_network.ext.name
+  nodes_subnet_name = azurerm_subnet.nodes_ext.name
 
   identity_name     = "quix-private-nat-id"
   public_ip_name    = "quix-private-nat-ip"
