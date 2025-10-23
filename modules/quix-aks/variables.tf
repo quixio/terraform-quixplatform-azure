@@ -47,6 +47,12 @@ variable "private_dns_zone_id" {
   default     = "System"
 }
 
+variable "private_dns_prefix" {
+  description = "Custom DNS prefix for private cluster. Only used when private_cluster_enabled is true and private_dns_zone_id is set to a custom zone ID. If null, uses the cluster name."
+  type        = string
+  default     = null
+}
+
 variable "oidc_issuer_enabled" {
   description = "Enable OIDC issuer"
   type        = bool
@@ -181,8 +187,9 @@ variable "nat_gateway_id" {
 }
 
 variable "availability_zone" {
-  description = "Availability zone for public IP"
+  description = "Availability zone for public IP (required only when create_nat is true)"
   type        = string
+  default     = null
 }
 
 variable "attach_identity_ids" {
