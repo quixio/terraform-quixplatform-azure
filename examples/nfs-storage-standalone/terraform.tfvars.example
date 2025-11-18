@@ -1,0 +1,41 @@
+# Copy this file to terraform.tfvars and fill in with your values
+
+# Existing Resource Group
+resource_group_name = "rg-myapp"
+
+# Existing VNet
+vnet_name = "vnet-myapp"
+
+# Subnet for Private Endpoints (must exist in the VNet)
+private_endpoint_subnet_name = "Subnet-PrivateEndpoints"
+
+# Allowed subnet to access NFS (e.g., VMs subnet, AKS nodes)
+# Leave empty ("") if you don't want to allow any subnet
+allowed_subnet_name = "Subnet-Nodes"
+
+# Storage Account name (must be globally unique)
+# 3-24 characters, lowercase letters and numbers only
+storage_account_name = "mynfsstorage01"
+
+# Your public IP for Terraform operations
+# Get your IP with: curl https://api.ipify.org
+allowed_ip_addresses = ["1.2.3.4"]
+
+# NFS shares to create
+nfs_shares = [
+  {
+    name     = "shared-data"
+    quota_gb = 100
+  },
+  {
+    name     = "app-logs"
+    quota_gb = 50
+  }
+]
+
+# Optional tags
+tags = {
+  environment = "production"
+  project     = "MyApp"
+  managed_by  = "terraform"
+}
