@@ -48,10 +48,11 @@ This example demonstrates how to deploy an AKS cluster with an NFS v3 storage ac
 ## Features
 
 - **AKS Cluster**: Kubernetes 1.32.4 with 3 node pools
-- **NFS Storage**: Premium FileStorage with NFS v3
+- **NFS Storage**: Premium FileStorage with NFS 4.1
 - **Private Link**: Private access from entire VNet
 - **Auto Private DNS**: Automatic DNS zone creation and linking
-- **Security**: No public access, all traffic is private
+- **Network Security Rules**: Default deny policy with subnet and IP allowlists
+- **Security**: Public storage with firewall rules, all NFS traffic is private via Private Endpoint
 
 ## Components
 
@@ -67,12 +68,13 @@ This example demonstrates how to deploy an AKS cluster with an NFS v3 storage ac
 
 ### 3. NFS Storage Module (All-in-one)
 The module automatically creates:
-- **Premium Storage Account** with NFS v3
+- **Premium Storage Account** with NFS 4.1 support
+- **Network Security Rules** (default deny + allowlist for AKS nodes subnet and admin IP)
 - **Private Endpoint** in the specified subnet
 - **Private DNS Zone** `privatelink.file.core.windows.net`
 - **VNet Link** for automatic DNS resolution
-- **2 NFS shares**: `data` (100GB) and `shared` (200GB)
-- Access only from VNet via Private Link
+- **NFS File Share**: `sharedpvc` (200GB)
+- Access from allowed subnets via Private Endpoint, plus admin IP for Terraform operations
 
 ## Usage
 
@@ -97,27 +99,34 @@ kubectl get nodes
 
 ### Mount NFS in Kubernetes
 
-After deployment, you can mount the NFS shares in your pods:
+After deployment, create a StorageClass that references the NFS share:
+
+#### 1. Create StorageClass
 
 ```yaml
-apiVersion: v1
-kind: PersistentVolume
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
 metadata:
-  name: nfs-pv-data
-spec:
-  capacity:
-    storage: 100Gi
-  accessModes:
-    - ReadWriteMany
-  persistentVolumeReclaimPolicy: Retain
-  mountOptions:
-    - vers=3
-    - nconnect=8
-  nfs:
-    # Storage account resolves via Private DNS
-    server: quixnfsstor01.file.core.windows.net
-    path: /quixnfsstor01/data
----
+  name: azurefilenfs-csi-nfs
+provisioner: nfs.csi.k8s.io
+parameters:
+  server: "quixnfsstor01.privatelink.file.core.windows.net"  # Storage account with Private Link DNS
+  share: "/quixnfsstor01/sharedpvc"                          # NFS file share name
+mountOptions:
+  - vers=4.1
+  - minorversion=1
+  - sec=sys
+  - hard
+  - timeo=600
+  - retrans=2
+reclaimPolicy: Retain
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+```
+
+#### 2. Create PersistentVolumeClaim
+
+```yaml
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -125,10 +134,30 @@ metadata:
 spec:
   accessModes:
     - ReadWriteMany
+  storageClassName: azurefilenfs-csi-nfs
   resources:
     requests:
       storage: 100Gi
-  volumeName: nfs-pv-data
+```
+
+#### 3. Use in Pod
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nfs-test-pod
+spec:
+  containers:
+  - name: app
+    image: nginx
+    volumeMounts:
+    - name: nfs-storage
+      mountPath: /mnt/nfs
+  volumes:
+  - name: nfs-storage
+    persistentVolumeClaim:
+      claimName: nfs-pvc-data
 ```
 
 ### Verify private DNS resolution
@@ -151,8 +180,9 @@ nslookup quixnfsstor01.file.core.windows.net
 |----------|-------|-------------|
 | `storage_account_name` | `quixnfsstor01` | **Must be globally unique** |
 | `vnet_id` | `module.aks.vnet_id` | **Required for auto DNS zone creation** |
-| `enable_secure_traffic` | `false` | NFS v3 typically doesn't use HTTPS |
-| `nfs_shares` | `[data, shared]` | NFS shares to create |
+| `allowed_subnet_ids` | `[module.aks.nodes_subnet_id]` | Subnets allowed to access storage (AKS nodes) |
+| `allowed_ip_addresses` | Auto-detected via `data.http` | Your public IP for Terraform operations (create/destroy shares) |
+| `nfs_shares` | `[sharedpvc]` | NFS 4.1 shares to create |
 
 ## Key Simplifications
 
@@ -185,11 +215,13 @@ terraform destroy
 ## Important Notes
 
 1. **Storage Account Name**: Must be globally unique (3-24 chars, lowercase alphanumeric only)
-2. **Premium Storage**: Required for NFS v3, higher cost than Standard
+2. **Premium Storage**: Required for NFS 4.1, higher cost than Standard
 3. **Private DNS**: Automatically created and linked by the module
-4. **Network Access**: Completely private, no public access
-5. **NFS v3**: No protocol-level authentication, security via Private Link
-6. **VNet ID**: Required when not providing custom `private_dns_zone_ids`
+4. **Network Security**: Public storage with default deny policy + explicit allowlist for subnets and IPs
+5. **NFS 4.1**: POSIX-compliant file system with better security than NFS 3.0
+6. **HTTPS Traffic**: Always disabled for NFS (NFS protocol doesn't use HTTPS)
+7. **VNet ID**: Required when not providing custom `private_dns_zone_ids`
+8. **Admin IP**: Auto-detected from https://api.ipify.org for Terraform operations (create/destroy file shares)
 
 ## Alternative: Custom DNS Zone
 
