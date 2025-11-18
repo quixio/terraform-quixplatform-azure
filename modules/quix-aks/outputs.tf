@@ -22,6 +22,11 @@ output "vnet_id" {
   value       = coalesce(try(azurerm_virtual_network.this[0].id, null), try(data.azurerm_virtual_network.existing[0].id, null))
 }
 
+output "vnet_name" {
+  description = "Name of the virtual network"
+  value       = coalesce(try(azurerm_virtual_network.this[0].name, null), try(data.azurerm_virtual_network.existing[0].name, null), var.vnet_name)
+}
+
 output "nodes_subnet_id" {
   description = "ID of the nodes subnet"
   value       = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))

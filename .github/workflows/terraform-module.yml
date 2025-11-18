@@ -1,18 +1,19 @@
-name: quix-aks module CI/CD
+name: Quix Terraform modules CI/CD
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
     paths:
-      - 'modules/quix-aks/**'
-      - 'modules/tiered-storage/**'
-      - '.github/workflows/terraform-module.yml'
+      - "modules/quix-aks/**"
+      - "modules/tiered-storage/**"
+      - "modules/nfs-storage/**"
+      - ".github/workflows/terraform-module.yml"
   workflow_dispatch:
     inputs:
       bump:
-        description: 'Version bump (patch, minor, major)'
+        description: "Version bump (patch, minor, major)"
         required: true
-        default: 'minor'
+        default: "minor"
         type: choice
         options: [patch, minor, major]
 
@@ -29,7 +30,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        module: [ 'modules/quix-aks', 'modules/tiered-storage' ]
+        module:
+          ["modules/quix-aks", "modules/tiered-storage", "modules/nfs-storage"]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -56,7 +58,7 @@ jobs:
           working-dir: ${{ matrix.module }}
           output-file: README.md
           output-method: inject
-          config-file: ''
+          config-file: ""
           git-push: true
 
   release:
@@ -77,7 +79,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEFAULT_BUMP: ${{ github.event.inputs.bump }}
-          TAG_PREFIX: 'v'
+          TAG_PREFIX: "v"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
