@@ -1,5 +1,9 @@
 # Terraform Modules (Azure)
 
+![Terraform](https://img.shields.io/badge/Terraform-7B42BC?style=for-the-badge&logo=terraform&logoColor=white)
+![Azure](https://img.shields.io/badge/Azure-0078D4?style=for-the-badge&logo=microsoftazure&logoColor=white)
+![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white)
+
 Repository of production-ready Terraform modules for installing quix-platform.
 
 ## Structure
@@ -14,10 +18,14 @@ Repository of production-ready Terraform modules for installing quix-platform.
 - `modules/tiered-storage/` (Tiered Storage module)
   - `main.tf`: Storage Account, federated identity credentials, role assignment for kubelet identity
   - `README.md`: terraform-docs generated documentation
+- `modules/nfs-storage/` (NFS Storage module)
+  - `main.tf`: Azure Files Premium (NFS 4.1), Private Endpoint, network security rules
+  - `README.md`: module documentation
 - `examples/` usage examples
   - `public-quix-infr/`: public cluster
   - `private-quix-infr/`: private cluster with Bastion + jumpbox
   - `public-quix-infr-tiered-storage/`: public cluster + tiered-storage module
+  - `public-quix-infr-nfs-storage/`: public cluster + nfs-storage module
   - `private-quix-infr-external-vnet/`: private cluster using external VNet/Subnets, external NAT (BYO), and Bastion subnet
 - `BASTION_ACCESS.md`: how to access a private AKS via Bastion
 
@@ -70,6 +78,8 @@ module "quix_aks" {
 
 ## Tiered Storage module (tiered-storage)
 
+Azure Blob Storage with workload identity federation for Quix tiered storage.
+
 Module documentation (inputs/outputs/resources):
 
 - [modules/tiered-storage/README.md](modules/tiered-storage/README.md) (generated with terraform-docs)
@@ -81,9 +91,59 @@ cd modules/tiered-storage
 terraform-docs markdown table --output-file README.md --output-mode inject .
 ```
 
+## NFS Storage module (nfs-storage)
+
+Azure Files Premium with NFS 4.1 support, secured with Private Endpoint and network security rules.
+
+**Features:**
+- Azure Files Premium (NFS 4.1) for high-performance file storage
+- Private Endpoint for secure VNet connectivity
+- Network security rules with default deny policy
+- Auto DNS zone creation for `privatelink.file.core.windows.net`
+- Multiple NFS shares support
+
+Module documentation:
+
+- [modules/nfs-storage/README.md](modules/nfs-storage/README.md)
+
+**Quick example:**
+
+```hcl
+module "nfs_storage" {
+  source = "./modules/nfs-storage"
+
+  resource_group_name  = "rg-myapp"
+  location             = "westeurope"
+  storage_account_name = "mystorageaccount01"
+
+  # Private Endpoint configuration
+  private_endpoint_subnet_id = azurerm_subnet.private_endpoints.id
+  vnet_id                    = azurerm_virtual_network.main.id
+
+  # Network Security Rules - Default deny policy
+  allowed_subnet_ids   = [azurerm_subnet.aks_nodes.id]
+  allowed_ip_addresses = ["1.2.3.4"]  # Your public IP
+
+  nfs_shares = [
+    {
+      name     = "shared-data"
+      quota_gb = 100
+    }
+  ]
+}
+```
+
+**Mounting NFS shares:**
+
+```bash
+sudo mount -t nfs -o vers=4.1,sec=sys \
+  mystorageaccount01.privatelink.file.core.windows.net:/mystorageaccount01/shared-data \
+  /mnt/shared-data
+```
+
 ## Examples
 
-Public example:
+Public cluster:
 
 ```bash
 cd examples/public-quix-infr
@@ -91,7 +151,7 @@ terraform init
 terraform apply
 ```
 
-Private example (with Bastion):
+Private cluster (with Bastion):
 
 ```bash
 cd examples/private-quix-infr
@@ -99,7 +159,23 @@ terraform init
 terraform apply
 ```
 
-External VNet + external NAT + Bastion subnet example:
+Public cluster with Tiered Storage:
+
+```bash
+cd examples/public-quix-infr-tiered-storage
+terraform init
+terraform apply
+```
+
+Public cluster with NFS Storage:
+
+```bash
+cd examples/public-quix-infr-nfs-storage
+terraform init
+terraform apply
+```
+
+External VNet + external NAT + Bastion subnet:
 
 ```bash
 cd examples/private-quix-infr-external-vnet
