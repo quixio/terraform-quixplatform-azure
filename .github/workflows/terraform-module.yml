@@ -52,14 +52,14 @@ jobs:
       - name: Terraform validate
         run: terraform validate
 
-      - name: Generate terraform-docs (inject & commit)
-        uses: terraform-docs/gh-actions@v1.3.0
-        with:
-          working-dir: ${{ matrix.module }}
-          output-file: README.md
-          output-method: inject
-          config-file: ""
-          git-push: true
+      # - name: Generate terraform-docs (inject & commit)
+      #   uses: terraform-docs/gh-actions@v1.3.0
+      #   with:
+      #     working-dir: ${{ matrix.module }}
+      #     output-file: README.md
+      #     output-method: inject
+      #     config-file: ""
+      #     git-push: true
 
   release:
     name: Tag release
