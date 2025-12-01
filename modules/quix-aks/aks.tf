@@ -21,7 +21,7 @@ resource "azurerm_kubernetes_cluster" "this" {
     node_count     = local.system_pool.node_count
     vm_size        = local.system_pool.vm_size
     vnet_subnet_id = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
-    max_pods = 110
+    max_pods = 250
 
     upgrade_settings {
       max_surge                     = "10%"
@@ -73,7 +73,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "additional" {
   vnet_subnet_id        = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
   mode                  = lower(coalesce(each.value.mode, each.value.type)) == "system" ? "System" : "User"
   node_taints           = coalesce(each.value.taints, null)
-  max_pods              = 110 
+  max_pods              = 250 
   orchestrator_version  = var.kubernetes_version
 
   upgrade_settings {
