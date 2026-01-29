@@ -1,0 +1,33 @@
+# Example terraform.tfvars for dual-cluster deployment
+# Copy this file to terraform.tfvars and customize as needed
+
+# Azure region
+location = "westeurope"
+
+# Resource naming
+resource_group_name = "rg-quix-dual-cluster"
+vnet_name           = "vnet-quix-shared"
+ctrl_cluster_name   = "quix-aks-ctrl"
+data_cluster_name   = "quix-aks-data"
+
+# Kubernetes version
+kubernetes_version = "1.33.5"
+
+# Network configuration
+vnet_address_space     = ["10.240.0.0/16"]
+ctrl_plane_subnet_cidr = "10.240.0.0/22"
+data_plane_subnet_cidr = "10.240.4.0/22"
+availability_zone      = "2" # Zone pinning required to avoid disk attachment issues
+
+# Node pool sizing
+system_node_vm_size   = "Standard_D2ds_v5"
+system_node_count     = 2
+workload_node_vm_size = "Standard_E4ds_v5"
+workload_node_count   = 3
+
+# Resource tags
+tags = {
+  environment = "demo"
+  project     = "Quix"
+  managed-by  = "terraform"
+}
