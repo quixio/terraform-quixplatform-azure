@@ -75,7 +75,7 @@ module "aks" {
   location                = "westeurope"
   resource_group_name     = azurerm_resource_group.this.name
   create_resource_group   = false
-  kubernetes_version      = "1.32.4"
+  kubernetes_version      = "1.33.5"
   sku_tier                = "Standard"
   private_cluster_enabled = true
 
@@ -89,11 +89,18 @@ module "aks" {
 
   enable_credentials_fetch = true
   node_pools = {
-    default = {
-      name       = "default"
+    system = {
+      name       = "system"
       type       = "system"
       node_count = 2
-      vm_size    = "Standard_D4ds_v5"
+      vm_size    = "Standard_D2ds_v5"
+    }
+    platform = {
+      name       = "platform"
+      type       = "user"
+      node_count = 3
+      vm_size    = "Standard_E4ds_v5"
+      labels     = { "quix.io/node-purpose" = "platform-services" }
     }
   }
 

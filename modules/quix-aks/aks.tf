@@ -72,7 +72,7 @@ resource "azurerm_kubernetes_cluster_node_pool" "additional" {
   node_count            = each.value.node_count
   vnet_subnet_id        = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
   mode                  = lower(coalesce(each.value.mode, each.value.type)) == "system" ? "System" : "User"
-  node_taints           = coalesce(each.value.taints, null)
+  node_taints           = each.value.taints
   max_pods              = 250
   orchestrator_version  = var.kubernetes_version
 
