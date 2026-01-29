@@ -25,7 +25,7 @@ module "aks" {
   location                = "westeurope"
   resource_group_name     = "rg-quix-private"
   create_resource_group   = false
-  kubernetes_version      = "1.32.4"
+  kubernetes_version      = "1.33.5"
   sku_tier                = "Standard"
   private_cluster_enabled = true
   # Use existing Private DNS Zone for the AKS private API server:
@@ -75,19 +75,18 @@ module "aks" {
 
   # Node pools
   node_pools = {
-    default = {
-      name       = "default"
+    system = {
+      name       = "system"
       type       = "system"
       node_count = 2
-      vm_size    = "Standard_D4ds_v5"
+      vm_size    = "Standard_D2ds_v5"
     }
-    quix_controller = {
-      name       = "quixcontroller"
+    platform = {
+      name       = "platform"
       type       = "user"
-      node_count = 1
-      vm_size    = "Standard_D4ds_v5"
-      taints     = ["dedicated=controller:NoSchedule"]
-      labels     = { role = "controller" }
+      node_count = 3
+      vm_size    = "Standard_E4ds_v5"
+      labels     = { "quix.io/node-purpose" = "platform-services" }
     }
   }
 
