@@ -81,12 +81,14 @@ module "aks" {
       node_count = 2
       vm_size    = "Standard_D2ds_v5"
     }
-    platform = {
-      name       = "platform"
+    # Single workload pool for all workloads (platform services + customer deployments)
+    # You can add multiple pools with quix.io/node-purpose labels if workload separation is needed
+    # Valid label values: "platform-services", "customer-deployments"
+    workloads = {
+      name       = "workloads"
       type       = "user"
-      node_count = 3
+      node_count = 4
       vm_size    = "Standard_E4ds_v5"
-      labels     = { "quix.io/node-purpose" = "platform-services" }
     }
   }
 

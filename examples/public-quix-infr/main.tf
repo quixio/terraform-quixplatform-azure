@@ -34,6 +34,8 @@ module "aks" {
 
   enable_credentials_fetch = true
 
+  # Separate node pools for workload isolation (optional in single-cluster setups)
+  # Use quix.io/node-purpose labels to schedule workloads on specific pools
   node_pools = {
     system = {
       name       = "system"

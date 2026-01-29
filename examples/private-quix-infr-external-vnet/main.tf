@@ -88,6 +88,8 @@ module "aks" {
   availability_zone = "2"
 
   enable_credentials_fetch = true
+  # Separate node pools for workload isolation (optional in single-cluster setups)
+  # Use quix.io/node-purpose labels to schedule workloads on specific pools
   node_pools = {
     system = {
       name       = "system"
@@ -101,6 +103,13 @@ module "aks" {
       node_count = 3
       vm_size    = "Standard_E4ds_v5"
       labels     = { "quix.io/node-purpose" = "platform-services" }
+    }
+    deployments = {
+      name       = "deployments"
+      type       = "user"
+      node_count = 3
+      vm_size    = "Standard_E4ds_v5"
+      labels     = { "quix.io/node-purpose" = "customer-deployments" }
     }
   }
 

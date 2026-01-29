@@ -47,7 +47,7 @@ This example demonstrates how to deploy an AKS cluster with an NFS v3 storage ac
 
 ## Features
 
-- **AKS Cluster**: Kubernetes 1.32.4 with 3 node pools
+- **AKS Cluster**: Kubernetes 1.33.5 with system + platform + deployments pools
 - **NFS Storage**: Premium FileStorage with NFS 4.1
 - **Private Link**: Private access from entire VNet
 - **Auto Private DNS**: Automatic DNS zone creation and linking
@@ -57,7 +57,7 @@ This example demonstrates how to deploy an AKS cluster with an NFS v3 storage ac
 ## Components
 
 ### 1. AKS Cluster
-- 3 node pools: default, controller, deployments
+- Node pools: system (D2ds_v5), platform + deployments (E4ds_v5) with `quix.io/node-purpose` labels
 - Dedicated VNet with subnet for nodes
 - NAT Gateway for Internet egress
 
