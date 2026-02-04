@@ -115,14 +115,17 @@ variable "create_nodes_subnet" {
 variable "node_pools" {
   description = "Map of additional node pools (include a 'system' pool to override default)"
   type = map(object({
-    name       = string
-    type       = string # system | user
-    node_count = number
-    vm_size    = string
-    max_pods   = optional(number)
-    taints     = optional(list(string))
-    labels     = optional(map(string))
-    mode       = optional(string) # system | user (overrides type)
+    name           = string
+    type           = string # system | user
+    node_count     = number
+    vm_size        = string
+    max_pods       = optional(number)
+    taints         = optional(list(string))
+    labels         = optional(map(string))
+    mode           = optional(string)        # system | user (overrides type)
+    priority       = optional(string)        # Regular | Spot (default: Regular). Note: system pools cannot use Spot.
+    eviction_policy = optional(string)       # Delete | Deallocate (only for Spot, default: Delete)
+    spot_max_price = optional(number)        # Max price for Spot VMs, -1 = up to on-demand price (default: -1)
   }))
   default = {}
   validation {
@@ -132,6 +135,13 @@ variable "node_pools" {
   validation {
     condition     = alltrue([for p in values(var.node_pools) : contains(["system", "user"], lower(coalesce(p.mode, p.type)))])
     error_message = "node_pools[*].type/mode must be either 'system' or 'user'."
+  }
+  validation {
+    condition = alltrue([
+      for p in values(var.node_pools) :
+      !(lower(coalesce(p.mode, p.type)) == "system" && coalesce(p.priority, "Regular") == "Spot")
+    ])
+    error_message = "System node pools cannot use Spot priority. Only user pools support Spot instances."
   }
 }
 
