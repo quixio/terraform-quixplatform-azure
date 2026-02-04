@@ -73,8 +73,14 @@ resource "azurerm_kubernetes_cluster_node_pool" "additional" {
   vnet_subnet_id        = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
   mode                  = lower(coalesce(each.value.mode, each.value.type)) == "system" ? "System" : "User"
   node_taints           = each.value.taints
+  node_labels           = each.value.labels
   max_pods              = 250
   orchestrator_version  = var.kubernetes_version
+
+  # Spot instance configuration (only for User pools)
+  priority        = coalesce(each.value.priority, "Regular")
+  eviction_policy = coalesce(each.value.priority, "Regular") == "Spot" ? coalesce(each.value.eviction_policy, "Delete") : null
+  spot_max_price  = coalesce(each.value.priority, "Regular") == "Spot" ? coalesce(each.value.spot_max_price, -1) : null
 
   upgrade_settings {
     max_surge                     = "10%"
