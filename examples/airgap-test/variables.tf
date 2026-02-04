@@ -31,13 +31,13 @@ variable "system_node_vm_size" {
 }
 
 variable "workload_node_vm_size" {
-  description = "VM size for workload node pool"
+  description = "VM size for workload node pool (spot instances, no taint)"
   type        = string
   default     = "Standard_D4s_v3" # 4 vCPU, 16 GB RAM
 }
 
 variable "workload_node_count" {
-  description = "Number of workload nodes (minimum 2 for Quix platform)"
+  description = "Number of workload nodes (spot instances, minimum 2 for Quix platform)"
   type        = number
   default     = 2
 

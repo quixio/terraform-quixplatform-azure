@@ -394,16 +394,19 @@ resource "azurerm_kubernetes_cluster_node_pool" "workload" {
   max_pods              = 250
   orchestrator_version  = var.kubernetes_version
 
-  # NOTE: Using regular instances (not Spot) because:
-  # 1. Spot pools add taints that require tolerations on ALL pods
-  # 2. New node pools can't bootstrap in airgap mode (NSG blocks required traffic)
-  # For production airgap, ensure all pods have appropriate tolerations if using spot.
+  # Spot instances for cost savings (~60-80% cheaper)
+  # NOTE: No taints applied - pods schedule freely without needing tolerations
+  # The spot label is still applied for visibility but doesn't block scheduling
+  priority        = "Spot"
+  eviction_policy = "Delete"
+  spot_max_price  = -1 # Pay up to on-demand price
 
-  upgrade_settings {
-    max_surge                     = "10%"
-    drain_timeout_in_minutes      = 0
-    node_soak_duration_in_minutes = 0
+  node_labels = {
+    "kubernetes.azure.com/scalesetpriority" = "spot"
   }
+
+  # Intentionally NOT setting node_taints - this allows all pods to schedule
+  # without requiring tolerations in every helm chart and operator
 
   tags = local.common_tags
 }
