@@ -102,6 +102,11 @@ resource "azurerm_subnet" "nodes" {
 ################################################################################
 # Network Security Group - Airgap Rules
 #
+# IMPORTANT: The NSG association is applied AFTER the cluster and node pools
+# are created. AKS nodes require unrestricted internet access during bootstrap
+# to pull system images and register with the control plane. Once nodes are
+# ready, the NSG is applied to enforce airgap restrictions.
+#
 # Key insight from testing:
 # - quixregistry.azurecr.io is in francecentral
 # - MCR (mcr.microsoft.com) uses CDN IPs outside Azure ranges
@@ -298,9 +303,16 @@ resource "azurerm_network_security_group" "aks" {
   }
 }
 
+# NOTE: This association is created AFTER the cluster and node pools are ready.
+# AKS nodes need unrestricted internet during bootstrap. The NSG is applied
+# afterwards to enforce airgap restrictions for runtime workloads.
 resource "azurerm_subnet_network_security_group_association" "aks" {
   subnet_id                 = azurerm_subnet.nodes.id
   network_security_group_id = azurerm_network_security_group.aks.id
+
+  depends_on = [
+    azurerm_kubernetes_cluster_node_pool.workload,
+  ]
 }
 
 ################################################################################
@@ -373,8 +385,9 @@ resource "azurerm_kubernetes_cluster" "this" {
 
   tags = local.common_tags
 
+  # NOTE: We intentionally do NOT depend on the NSG association here.
+  # The NSG is applied AFTER the cluster is ready to avoid blocking bootstrap.
   depends_on = [
-    azurerm_subnet_network_security_group_association.aks,
     azurerm_role_assignment.aks_vnet,
     azurerm_role_assignment.aks_subnet,
   ]
