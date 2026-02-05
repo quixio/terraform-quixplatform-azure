@@ -1,0 +1,155 @@
+# Azure DevOps Pipeline - Airgap Test
+#
+# This pipeline creates an AKS cluster with airgap networking,
+# installs Quix BYOC, verifies the deployment, then tears everything down.
+#
+# Required Variable Groups:
+#   - quix-airgap-test-secrets (containing ACR and license credentials)
+#
+# Required Service Connections:
+#   - Azure subscription with permission to create AKS clusters
+#
+
+trigger: none  # Manual trigger only
+
+pr: none
+
+schedules:
+  # Run daily at 2 AM UTC (after release builds)
+  - cron: "0 2 * * *"
+    displayName: Daily airgap test
+    branches:
+      include:
+        - main
+    always: false  # Only if there are changes
+
+parameters:
+  - name: skipDestroy
+    displayName: Skip infrastructure destroy (for debugging)
+    type: boolean
+    default: false
+
+  - name: runId
+    displayName: Custom Run ID (leave empty for auto-generated)
+    type: string
+    default: ''
+
+variables:
+  - group: quix-airgap-test-secrets
+  - name: location
+    value: 'westeurope'
+  - name: kubernetesVersion
+    value: '1.30'
+  - name: terraformVersion
+    value: '1.5.7'
+  - name: byocRepoPath
+    value: '$(Build.SourcesDirectory)/../Infrastructure.BYOC'
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+stages:
+  - stage: AirgapTest
+    displayName: Airgap Test
+    jobs:
+      - job: RunAirgapTest
+        displayName: Run Airgap Test Pipeline
+        timeoutInMinutes: 90
+
+        steps:
+          # Checkout main repo
+          - checkout: self
+            displayName: Checkout terraform-quixplatform-azure
+            path: terraform-quixplatform-azure
+
+          # Checkout BYOC repo
+          - checkout: git://Quix/Infrastructure.BYOC@main
+            displayName: Checkout Infrastructure.BYOC
+            path: Infrastructure.BYOC
+
+          # Install Terraform
+          - task: TerraformInstaller@1
+            displayName: Install Terraform
+            inputs:
+              terraformVersion: $(terraformVersion)
+
+          # Azure CLI login
+          - task: AzureCLI@2
+            displayName: Azure Login and Run Test
+            inputs:
+              azureSubscription: 'quix-airgap-test-subscription'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              failOnStandardError: false
+              inlineScript: |
+                set -euo pipefail
+
+                # Set up environment
+                export QUIX_ACR_USERNAME="$(QUIX_ACR_USERNAME)"
+                export QUIX_ACR_PASSWORD="$(QUIX_ACR_PASSWORD)"
+                export QUIX_ZIP_CLIENT_ID="$(QUIX_ZIP_CLIENT_ID)"
+                export QUIX_ZIP_CLIENT_SECRET="$(QUIX_ZIP_CLIENT_SECRET)"
+                export QUIX_ZIP_TENANT_ID="$(QUIX_ZIP_TENANT_ID)"
+                export QUIX_LICENSE_KEY="$(QUIX_LICENSE_KEY)"
+                export BYOC_PATH="$(Pipeline.Workspace)/Infrastructure.BYOC"
+                export LOCATION="$(location)"
+                export KUBERNETES_VERSION="$(kubernetesVersion)"
+
+                # Build script arguments
+                SCRIPT_ARGS=""
+
+                if [ -n "${{ parameters.runId }}" ]; then
+                  SCRIPT_ARGS="$SCRIPT_ARGS --run-id ${{ parameters.runId }}"
+                fi
+
+                if [ "${{ parameters.skipDestroy }}" = "true" ]; then
+                  SCRIPT_ARGS="$SCRIPT_ARGS --skip-destroy"
+                fi
+
+                # Run the test script
+                cd "$(Pipeline.Workspace)/terraform-quixplatform-azure/examples/airgap-test"
+                chmod +x run-airgap-test.sh
+                ./run-airgap-test.sh $SCRIPT_ARGS
+
+          # Publish test results (if we add proper test output later)
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Logs
+            condition: always()
+            inputs:
+              targetPath: '$(Pipeline.Workspace)/terraform-quixplatform-azure/examples/airgap-test'
+              artifact: 'airgap-test-logs'
+              publishLocation: 'pipeline'
+
+  # Optional: Cleanup stage for orphaned resources
+  - stage: CleanupOrphans
+    displayName: Cleanup Orphaned Resources
+    condition: always()
+    dependsOn: AirgapTest
+    jobs:
+      - job: FindOrphans
+        displayName: Find and Report Orphaned Resources
+        steps:
+          - task: AzureCLI@2
+            displayName: Check for orphaned resources
+            inputs:
+              azureSubscription: 'quix-airgap-test-subscription'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Checking for orphaned airgap test resources..."
+
+                # Find resource groups matching our naming pattern
+                orphans=$(az group list --query "[?tags.purpose=='airgap-test' && tags.temporary=='true'].name" -o tsv || echo "")
+
+                if [ -n "$orphans" ]; then
+                  echo "##vso[task.logissue type=warning]Found orphaned resource groups:"
+                  echo "$orphans"
+
+                  # Check age - only report those older than 2 hours
+                  for rg in $orphans; do
+                    created=$(az group show -n "$rg" --query "tags.created_at" -o tsv 2>/dev/null || echo "")
+                    echo "  - $rg (created: ${created:-unknown})"
+                  done
+                else
+                  echo "No orphaned resources found"
+                fi
