@@ -354,7 +354,7 @@ resource "azurerm_kubernetes_cluster" "this" {
 
   default_node_pool {
     name           = "system"
-    node_count     = 1
+    node_count     = 2  # 2 nodes needed to run full platform (monitoring, kafka, etc.)
     vm_size        = var.system_node_vm_size
     vnet_subnet_id = azurerm_subnet.nodes.id
     max_pods       = 250

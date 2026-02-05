@@ -1,0 +1,166 @@
+# BYOC Values Template for Airgap Test Cluster
+# Copy this file to byoc-values.yaml and fill in credentials
+#
+# Required settings discovered during testing:
+# - monitoringEnabled: "true" - deploys prometheus/grafana
+# - loggingEnabled: "true" - deploys MinIO for object storage
+# - minio storage class: managed-csi (Azure Disk, not Azure Files)
+#
+# The airgap cluster uses NSG rules to block external traffic.
+# All images must come from quixregistry.azurecr.io
+
+global:
+  byocZipVersion: quixbyoc-1.15.202601261-20260116.3-ee.zip
+  cloudProvider: azure
+  customerName: airgap-test-CHANGEME
+  destinationDirectory: /app/ansible
+  environment: test
+  externalByocVersionsRepository:
+    enabled: false
+    pat: ""
+    tag: refs/tags/stable-release
+  kubeContext: agent-internal
+  namespace: quix
+  namespacePrefix: quix
+  privateByocStorageAccount:
+    clientId: CHANGEME
+    clientSecret: CHANGEME
+    enabled: true
+    secretName: zip-secret
+    tenantId: CHANGEME
+  privateDockerRegistryPassword: CHANGEME
+  privateDockerRegistryUrl: quixregistry.azurecr.io
+  privateDockerRegistryUsername: CHANGEME
+  rootDomain: airgap-test.internal
+  tier: BringYourOwnCluster
+  # IMPORTANT: Fix helm chart path for airgap registry
+  # Without this, URL becomes registry/helm and workspace-service appends helm/ = double helm
+  # Charts are at quixregistry.azurecr.io/helm/streaming-reader, not helm/helm/streaming-reader
+  helmNamespace: ""
+image:
+  containerRegistry: quixregistry.azurecr.io
+  pullPolicy: IfNotPresent
+  service: quixplatform-ansible-builder
+  tag: 1.6.7
+imagePullSecret:
+  enabled: true
+  name: registrypullsecret
+licenseKey: CHANGEME
+platformVariables:
+  tolerations:
+    - key: "kubernetes.azure.com/scalesetpriority"
+      operator: "Equal"
+      value: "spot"
+      effect: "NoSchedule"
+  infrastructure:
+    storage:
+      class:
+        premiumRwo: managed-csi
+        standardRwo: managed-csi
+        standardRwx: azurefile-csi
+        # IMPORTANT: MinIO needs managed-csi (Azure Disk) not azurefile-csi
+        # Azure Files doesn't support chmod which MinIO requires
+        minio: managed-csi
+      size:
+        gitea: 10Gi
+        internalRegistry: 10Gi
+        minio: 10Gi
+    containerCache:
+      enabled: false
+  platform:
+    subdomain: portal
+    customDomain: airgap-test.internal
+    featureFlags:
+      customCertificateAuthoritySupplied: "false"
+      allowDirectSignups: "true"
+      allowSocialSignups: "false"
+  ingress:
+    serviceType: LoadBalancer
+    certClusterIssuerCreate: "false"
+  kafka:
+    streaming:
+      instances:
+      - adminAuthSaslMechanism: ScramSha512
+        adminAuthSecurityMode: SaslSsl
+        adminBrokerList: kafka-streaming-airgap-kafka-streaming-airgap-pool-sha-0.quix-kafka-streaming-airgap.svc.cluster.local:9093
+        authSaslMechanism: SCRAM-SHA-512,PLAIN
+        brokerList: kafka-streaming-airgap-kafka-streaming-airgap-pool-sha-0.quix-kafka-streaming-airgap.svc.cluster.local:9093
+        brokerStorageSize: 10Gi
+        certType: self
+        chartProvider: strimzi
+        externalStartingPort: "30095"
+        extraVars:
+          certificate: {}
+          ingressRouteTcp: {}
+          kafka: {}
+          middleware: {}
+          namespace: {}
+          nodepool: {}
+        ipAllowList: ""
+        isDefault: true
+        kafkaExporterExpose: false
+        kafkaProvider: selfHosted
+        kafkaSubdomain: kafka-streaming-airgap
+        kafkaVersion: 3.9.0
+        listenerConfig:
+          name: sha
+          port: 9093
+        msk:
+          clusterArn: ""
+          kmsKeyId: ""
+        name: kafka-streaming-airgap
+        replicaCount: "1"
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+          requests:
+            cpu: 500m
+            memory: 2Gi
+        securityMode: SaslSsl
+        storageClass: "managed-csi"
+        tolerations:
+          - key: "kubernetes.azure.com/scalesetpriority"
+            operator: "Equal"
+            value: "spot"
+            effect: "NoSchedule"
+        zookeeperServers: ""
+  mongo:
+    replicaCount: "1"
+    storageSize: 8Gi
+rolesFlags:
+  acmeEnabled: "false"
+  giteaEnabled: "true"
+  ingressEnabled: "true"
+  installLoadbalancer: "false"
+  internalRegistryEnabled: "false"
+  # IMPORTANT: loggingEnabled must be true - it deploys MinIO for object storage
+  loggingEnabled: "true"
+  mongoDbEnabled: "true"
+  # IMPORTANT: monitoringEnabled must be true for prometheus/grafana
+  monitoringEnabled: "true"
+  platformEnabled: "true"
+  streamingKafkaEnableInternalHosting: "true"
+  streamingKafkaEnableStrimziOperator: "true"
+secrets:
+  secretName: platform-secrets
+  dockerHub:
+    enabled: false
+  mongodb:
+    replicasetkey: HOOK_ALPHANUMERIC_16
+    rootAdminName: root
+    rootAdminPassword: HOOK_ALPHANUMERIC_16
+  gitea:
+    password: HOOK_ALPHANUMERIC_16
+    token: HOOK_ALPHANUMERIC_32
+  streamingKafka:
+    keystorePassword: HOOK_ALPHANUMERIC_16
+    saslPassword: HOOK_ALPHANUMERIC_16
+    saslUsername: HOOK_ALPHANUMERIC_16
+    truststorePassword: HOOK_ALPHANUMERIC_16
+  customerBuilds:
+    registry: "registry.airgap-test.internal"
+    registryPassword: HOOK_ALPHANUMERIC_16
+    registryUsername: HOOK_ALPHANUMERIC_16
+serviceAccount:
+  name: quix-agent-account
