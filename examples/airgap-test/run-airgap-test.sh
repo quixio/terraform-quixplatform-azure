@@ -45,7 +45,7 @@ RUN_ID=""
 SKIP_DESTROY=false
 BYOC_PATH="${BYOC_PATH:-}"
 LOCATION="${LOCATION:-westeurope}"
-KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.30}"
+KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.33.6}"
 INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-1800}" # 30 minutes
 
 # Tracking
@@ -373,7 +373,7 @@ wait_for_nodes() {
 
     while true; do
         local not_ready
-        not_ready=$(kubectl --context="$CLUSTER_CONTEXT" get nodes --no-headers | grep -v " Ready " | wc -l || echo "0")
+        not_ready=$(kubectl --context="$CLUSTER_CONTEXT" get nodes --no-headers 2>/dev/null | grep -cv " Ready " || echo "0")
 
         if [[ "$not_ready" -eq 0 ]]; then
             log_success "All nodes are Ready"
