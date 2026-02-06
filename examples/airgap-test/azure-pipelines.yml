@@ -3,12 +3,17 @@
 # This pipeline creates an AKS cluster with airgap networking,
 # installs Quix BYOC, verifies the deployment, then tears everything down.
 #
+# Uses the airgap-test-runner container for consistent tooling.
+#
 # Required Variable Groups:
 #   - quix-airgap-test-secrets (containing ACR and license credentials)
 #
 # Required Service Connections:
 #   - Azure subscription with permission to create AKS clusters
 #
+# Container Image:
+#   quixregistry.azurecr.io/airgap-test-runner:latest
+#   Build with: docker build --platform linux/amd64 -t quixregistry.azurecr.io/airgap-test-runner:latest .
 
 trigger: none  # Manual trigger only
 
@@ -39,14 +44,15 @@ variables:
   - name: location
     value: 'westeurope'
   - name: kubernetesVersion
-    value: '1.30'
-  - name: terraformVersion
-    value: '1.5.7'
+    value: '1.33.6'
   - name: byocRepoPath
     value: '$(Build.SourcesDirectory)/../Infrastructure.BYOC'
 
-pool:
-  vmImage: 'ubuntu-latest'
+resources:
+  containers:
+    - container: airgap-runner
+      image: quixregistry.azurecr.io/airgap-test-runner:latest
+      endpoint: quixregistry-service-connection
 
 stages:
   - stage: AirgapTest
@@ -55,6 +61,7 @@ stages:
       - job: RunAirgapTest
         displayName: Run Airgap Test Pipeline
         timeoutInMinutes: 90
+        container: airgap-runner
 
         steps:
           # Checkout main repo
@@ -67,13 +74,7 @@ stages:
             displayName: Checkout Infrastructure.BYOC
             path: Infrastructure.BYOC
 
-          # Install Terraform
-          - task: TerraformInstaller@1
-            displayName: Install Terraform
-            inputs:
-              terraformVersion: $(terraformVersion)
-
-          # Azure CLI login
+          # Azure CLI login (using task to handle service principal auth)
           - task: AzureCLI@2
             displayName: Azure Login and Run Test
             inputs:
@@ -94,6 +95,14 @@ stages:
                 export BYOC_PATH="$(Pipeline.Workspace)/Infrastructure.BYOC"
                 export LOCATION="$(location)"
                 export KUBERNETES_VERSION="$(kubernetesVersion)"
+
+                # Verify tools are available
+                echo "=== Tool Versions ==="
+                terraform version
+                kubectl version --client
+                helm version --short
+                az version --query '"azure-cli"' -o tsv
+                echo "===================="
 
                 # Build script arguments
                 SCRIPT_ARGS=""
@@ -128,6 +137,7 @@ stages:
     jobs:
       - job: FindOrphans
         displayName: Find and Report Orphaned Resources
+        container: airgap-runner
         steps:
           - task: AzureCLI@2
             displayName: Check for orphaned resources
@@ -145,11 +155,11 @@ stages:
                   echo "##vso[task.logissue type=warning]Found orphaned resource groups:"
                   echo "$orphans"
 
-                  # Check age - only report those older than 2 hours
-                  for rg in $orphans; do
-                    created=$(az group show -n "$rg" --query "tags.created_at" -o tsv 2>/dev/null || echo "")
-                    echo "  - $rg (created: ${created:-unknown})"
-                  done
+                  # Optionally delete orphans older than 24 hours
+                  # for rg in $orphans; do
+                  #   echo "Would delete: $rg"
+                  #   # az group delete -n "$rg" --yes --no-wait
+                  # done
                 else
-                  echo "No orphaned resources found"
+                  echo "No orphaned resources found."
                 fi
