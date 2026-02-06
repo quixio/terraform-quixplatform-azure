@@ -45,6 +45,7 @@ RUN tdnf install -y \
     gzip \
     git \
     jq \
+    gawk \
     ca-certificates \
     && tdnf clean all
 
