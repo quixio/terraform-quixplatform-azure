@@ -373,7 +373,9 @@ wait_for_nodes() {
 
     while true; do
         local not_ready
-        not_ready=$(kubectl --context="$CLUSTER_CONTEXT" get nodes --no-headers 2>/dev/null | grep -cv " Ready " | tr -d '[:space:]')
+        # Note: grep -c returns exit code 1 when count is 0, so we suppress with || true
+        not_ready=$(kubectl --context="$CLUSTER_CONTEXT" get nodes --no-headers 2>/dev/null | grep -cv " Ready " || true)
+        not_ready=$(echo "$not_ready" | tr -d '[:space:]')
         not_ready=${not_ready:-0}
 
         if [[ "$not_ready" -eq 0 ]]; then
