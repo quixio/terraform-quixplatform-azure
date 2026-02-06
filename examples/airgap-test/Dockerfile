@@ -48,6 +48,10 @@ RUN tdnf install -y \
     ca-certificates \
     && tdnf clean all
 
+# Install yq (YAML processor - required by dev.sh)
+RUN curl -fsSL "https://github.com/mikefarah/yq/releases/download/v4.40.5/yq_linux_amd64" -o /usr/local/bin/yq \
+    && chmod +x /usr/local/bin/yq
+
 # Install Terraform
 RUN curl -fsSL "https://releases.hashicorp.com/terraform/${TERRAFORM_VERSION}/terraform_${TERRAFORM_VERSION}_linux_amd64.zip" -o /tmp/terraform.zip \
     && unzip /tmp/terraform.zip -d /usr/local/bin \
