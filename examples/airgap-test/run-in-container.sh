@@ -58,11 +58,12 @@ echo "BYOC Path: $BYOC_PATH"
 echo "BYOCVersions Path: $BYOCVERSIONS_PATH"
 echo ""
 
-# Run the container with ACR login first
+# Run the container - mount docker config for ACR credentials
 docker run -it --rm \
     --platform linux/amd64 \
     -v ~/.azure:/root/.azure \
     -v ~/.kube:/root/.kube \
+    -v ~/.docker/config.json:/root/.docker/config.json:ro \
     -v "$SCRIPT_DIR:/workspace" \
     -v "$BYOC_PATH:/byoc" \
     -v "$BYOCVERSIONS_PATH:/byocversions" \
@@ -76,6 +77,5 @@ docker run -it --rm \
     -e BYOC_PATH=/byoc \
     -e BYOCVERSIONS_DIR=/byocversions \
     -e AZURE_CLI_DISABLE_AZURELINUX2_WARNING=1 \
-    --entrypoint /bin/bash \
     quixregistry.azurecr.io/airgap-test-runner:latest \
-    -c "az acr login -n quixregistry && az acr login -n quixcontainerregistry && ./run-airgap-test.sh $*"
+    ./run-airgap-test.sh "$@"
