@@ -76,5 +76,6 @@ docker run -it --rm \
     -e BYOC_PATH=/byoc \
     -e BYOCVERSIONS_DIR=/byocversions \
     -e AZURE_CLI_DISABLE_AZURELINUX2_WARNING=1 \
+    --entrypoint /bin/bash \
     quixregistry.azurecr.io/airgap-test-runner:latest \
-    bash -c "az acr login -n quixregistry && az acr login -n quixcontainerregistry && ./run-airgap-test.sh $*"
+    -c "az acr login -n quixregistry && az acr login -n quixcontainerregistry && ./run-airgap-test.sh $*"
