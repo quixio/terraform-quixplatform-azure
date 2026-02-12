@@ -130,7 +130,7 @@ validate_prerequisites() {
     local missing=()
 
     # Check required tools
-    for cmd in terraform az kubectl jq; do
+    for cmd in terraform az kubectl jq curl; do
         if ! command -v "$cmd" &> /dev/null; then
             missing+=("$cmd")
         fi
@@ -191,6 +191,125 @@ validate_prerequisites() {
     log "Azure Subscription: $(az account show --query name -o tsv)"
     log "Location: $LOCATION"
     log_success "All prerequisites validated"
+}
+
+################################################################################
+# Registry Pre-check (fail fast before provisioning infrastructure)
+################################################################################
+
+# Charts and images that must exist in the registry for a successful deployment.
+# If any are missing, we abort before spending 10+ minutes on terraform apply.
+REQUIRED_CHARTS=(
+    "helm/quixplatform-manager"
+    "helm/workspace-service"
+    "helm/deployments-service"
+    "helm/portal-api"
+    "helm/portal-frontend"
+    "helm/admin-ui"
+    "helm/streaming-reader"
+    "helm/git-api"
+    "helm/cert-manager"
+    "helm/traefik"
+    "helm/mongodb"
+    "helm/strimzi-kafka-operator"
+    "helm/grafana"
+    "helm/prometheus"
+    "helm/loki"
+    "helm/minio"
+    "helm/gitea"
+)
+
+REQUIRED_IMAGES=(
+    "quixplatform-ansible-builder"
+    "workspace-service"
+    "deployments-service"
+    "portal-api"
+    "portal-frontend"
+    "admin-ui"
+    "jetstack/cert-manager-controller"
+    "jetstack/cert-manager-webhook"
+    "jetstack/cert-manager-cainjector"
+    "traefik/traefik"
+    "bitnami/mongodb"
+    "strimzi/operator"
+    "strimzi/kafka"
+    "grafana/grafana"
+    "prometheus/prometheus"
+    "grafana/loki"
+    "minio/minio"
+)
+
+precheck_registry() {
+    log_section "Pre-check: Validating Registry"
+
+    local acr_registry="quixregistry.azurecr.io"
+    local passed=0
+    local failed=0
+    local missing_items=()
+
+    # Authenticate to ACR
+    log "Authenticating to ${acr_registry}..."
+    local token
+    token=$(curl -sf -u "${QUIX_ACR_USERNAME}:${QUIX_ACR_PASSWORD}" \
+        "https://${acr_registry}/oauth2/token?service=${acr_registry}&scope=registry:catalog:*" \
+        | jq -r '.access_token // empty' 2>/dev/null || true)
+
+    local auth_header
+    if [[ -n "$token" ]]; then
+        auth_header="Bearer ${token}"
+    else
+        auth_header="Basic $(echo -n "${QUIX_ACR_USERNAME}:${QUIX_ACR_PASSWORD}" | base64)"
+    fi
+
+    # Check helper: verify a repository has at least one tag
+    check_artifact() {
+        local repo="$1"
+        local tags
+        tags=$(curl -sf -H "Authorization: ${auth_header}" \
+            "https://${acr_registry}/v2/${repo}/tags/list" 2>/dev/null \
+            | jq -r '.tags // empty')
+
+        if [[ -n "$tags" && "$tags" != "null" ]]; then
+            local count
+            count=$(echo "$tags" | jq 'length')
+            log "  ${GREEN}[OK]${NC} $repo ($count tags)"
+            passed=$((passed + 1))
+            return 0
+        else
+            log "  ${RED}[MISSING]${NC} $repo"
+            failed=$((failed + 1))
+            missing_items+=("$repo")
+            return 1
+        fi
+    }
+
+    # Check helm charts
+    log "Checking Helm charts..."
+    for chart in "${REQUIRED_CHARTS[@]}"; do
+        check_artifact "$chart" || true
+    done
+
+    # Check container images
+    echo ""
+    log "Checking container images..."
+    for image in "${REQUIRED_IMAGES[@]}"; do
+        check_artifact "$image" || true
+    done
+
+    # Summary
+    echo ""
+    log "Registry check: ${passed} passed, ${failed} failed"
+
+    if [[ ${#missing_items[@]} -gt 0 ]]; then
+        log_error "Missing artifacts in ${acr_registry}:"
+        for item in "${missing_items[@]}"; do
+            echo "  - $item"
+        done
+        log_error "These must be mirrored to the registry before deployment."
+        return 1
+    fi
+
+    log_success "All required artifacts present in registry"
 }
 
 ################################################################################
@@ -428,68 +547,34 @@ install_byoc() {
 verify_deployment() {
     log_section "Verifying Deployment"
 
-    local timeout=300
-    local start_time=$(date +%s)
+    local healthcheck="$SCRIPT_DIR/scripts/healthcheck.sh"
 
-    log "Waiting for pods to be Running..."
-
-    while true; do
-        # Count non-running pods (excluding Completed jobs)
-        local not_running
-        not_running=$(kubectl --context="$CLUSTER_CONTEXT" get pods -n quix --no-headers 2>/dev/null | \
-            grep -v Running | grep -v Completed | wc -l || echo "999")
-
-        if [[ "$not_running" -eq 0 ]]; then
-            log_success "All pods are Running"
-            break
-        fi
-
-        local elapsed=$(($(date +%s) - start_time))
-        if [[ $elapsed -gt $timeout ]]; then
-            log_warn "Timeout waiting for all pods. Checking status..."
-            break
-        fi
-
-        log "Waiting for $not_running pod(s) to be Running... (${elapsed}s/${timeout}s)"
-        sleep 15
-    done
-
-    # Show final pod status
-    echo ""
-    log "Pod Status:"
-    kubectl --context="$CLUSTER_CONTEXT" get pods -n quix
-
-    # Check for critical failures
-    local failed_pods
-    failed_pods=$(kubectl --context="$CLUSTER_CONTEXT" get pods -n quix --no-headers 2>/dev/null | \
-        grep -E "(CrashLoopBackOff|ImagePullBackOff|Error)" | wc -l || echo "0")
-
-    if [[ "$failed_pods" -gt 0 ]]; then
-        log_error "Found $failed_pods pod(s) in failed state"
-        kubectl --context="$CLUSTER_CONTEXT" get pods -n quix | grep -E "(CrashLoopBackOff|ImagePullBackOff|Error)"
+    if [[ ! -x "$healthcheck" ]]; then
+        log_error "healthcheck.sh not found at: $healthcheck"
         return 1
     fi
 
-    # Check workspace-service specifically (critical for airgap validation)
-    local ws_running
-    ws_running=$(kubectl --context="$CLUSTER_CONTEXT" get pods -n quix -l app=workspace-service --no-headers 2>/dev/null | \
-        grep Running | wc -l || echo "0")
+    # Run the comprehensive health checker
+    local exit_code=0
+    "$healthcheck" --verbose || exit_code=$?
 
-    if [[ "$ws_running" -lt 1 ]]; then
-        log_error "workspace-service is not running - airgap validation failed"
-        kubectl --context="$CLUSTER_CONTEXT" logs -l app=workspace-service -n quix --tail=50 2>/dev/null || true
-        return 1
-    fi
-
-    log_success "Airgap deployment verified successfully"
-
-    # Summary
-    echo ""
-    log "Deployment Summary:"
-    kubectl --context="$CLUSTER_CONTEXT" get pods -n quix --no-headers | \
-        awk '{print $3}' | sort | uniq -c | while read count status; do
-            echo "  $status: $count"
-        done
+    # Exit code mapping:
+    #   0 = all checks passed
+    #   1 = critical failure (registry/infra)
+    #   2 = platform issues (services unhealthy)
+    #   3 = warnings only (non-critical)
+    case $exit_code in
+        0)
+            log_success "All health checks passed"
+            ;;
+        3)
+            log_warn "Health checks passed with warnings (non-critical)"
+            ;;
+        *)
+            log_error "Health checks failed (exit code: $exit_code)"
+            return 1
+            ;;
+    esac
 
     return 0
 }
@@ -515,6 +600,7 @@ main() {
 
     # Run pipeline stages
     validate_prerequisites
+    precheck_registry
     terraform_init
     terraform_apply
     get_credentials
