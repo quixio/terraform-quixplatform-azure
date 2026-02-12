@@ -29,8 +29,9 @@ terraform {
   }
 
   # Backend configured via -backend-config in CI/CD
-  # Commented out for local testing - uncomment for CI/CD
-  # backend "azurerm" {}
+  # For local testing: omit -backend-config flags to use local state
+  # For CI/CD: pass -backend-config="resource_group_name=..." etc.
+  backend "azurerm" {}
 }
 
 provider "azurerm" {

@@ -1,1 +1,12 @@
+# Rendered values (contains secrets)
 byoc-values.yaml
+
+# Terraform state (managed remotely in CI/CD)
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Local vars (may contain secrets)
+terraform.tfvars
+*.auto.tfvars
