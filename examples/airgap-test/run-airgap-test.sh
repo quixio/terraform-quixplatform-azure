@@ -197,29 +197,7 @@ validate_prerequisites() {
 # Registry Pre-check (fail fast before provisioning infrastructure)
 ################################################################################
 
-# Charts and images that must exist in the registry for a successful deployment.
-# If any are missing, we abort before spending 10+ minutes on terraform apply.
-# Paths must match target paths in scripts/repomirror/config/*.json
-REQUIRED_CHARTS=(
-    "helm/quixplatform-manager"
-    "helm/workspace-service"
-    "helm/deployments-service"
-    "helm/portal-api"
-    "helm/portal"
-    "helm/admin-ui"
-    "helm/streaming-reader"
-    "helm/git-api"
-    "helm/jetstack/cert-manager"
-    "helm/traefik/traefik"
-    "helm/bitnami/mongodb"
-    "helm/strimzi/strimzi-kafka-operator"
-    "helm/prometheus-community/kube-prometheus-stack"
-    "helm/grafana/loki"
-    "helm/bitnami/minio"
-    "helm/gitea/gitea"
-    "helm/keycloak"
-)
-
+# Container images that must exist in the registry.
 REQUIRED_IMAGES=(
     "quixplatform-ansible-builder"
     "workspace-service"
@@ -240,6 +218,57 @@ REQUIRED_IMAGES=(
     "bitnami/minio"
 )
 
+# Infrastructure chart -> version mappings. Each entry:
+#   chart_repo|relative_path_to_versions_yaml|grep_pattern_for_version
+# The version is extracted from BYOC role files so we check exact tags, not just
+# repo existence. This catches version drift (new release not yet mirrored).
+CHART_VERSION_SOURCES=(
+    "helm/pod-status-watcher-service|roles/pod_status_watcher/tasks/versions.yaml|pod_status_watcher_version"
+    "helm/jetstack/cert-manager|roles/cert_manager/tasks/versions.yaml|cert_manager_chart_version"
+    "helm/traefik/traefik|roles/ingress/tasks/versions.yaml|traefik_ingress_chart_version"
+    "helm/bitnami/mongodb|roles/mongo/tasks/versions.yaml|mongodb_chart_version"
+    "helm/strimzi/strimzi-kafka-operator|roles/kafka_operator/tasks/versions.yaml|kafka_operator_chart_version"
+    "helm/prometheus-community/kube-prometheus-stack|roles/monitoring/tasks/versions.yaml|prometheus_chart_version"
+    "helm/grafana/loki|roles/logging/tasks/versions.yaml|loki_version"
+    "helm/bitnami/minio|roles/logging/tasks/versions.yaml|minio_version"
+    "helm/gitea/gitea|roles/gitea/tasks/versions.yaml|gitea_chart_version"
+    "helm/annotation-transmuter-webhook|roles/annotation_transmuter_webhook/tasks/versions.yaml|annotation_transmuter_webhook_version"
+)
+
+# Charts where we only check repo existence (version comes from dynamic config
+# or container_versions.yaml and is harder to extract statically).
+REQUIRED_CHARTS=(
+    "helm/quixplatform-manager"
+    "helm/workspace-service"
+    "helm/deployments-service"
+    "helm/portal-api"
+    "helm/portal"
+    "helm/admin-ui"
+    "helm/streaming-reader"
+    "helm/git-api"
+    "helm/quix-environment-operator"
+    "helm/container-cache"
+    "helm/keycloak"
+)
+
+# Extract a version string from a BYOC Ansible versions.yaml file.
+# Looks for patterns like: variable_name: "1.2.3" or variable_name: 1.2.3
+extract_byoc_version() {
+    local file="$1"
+    local var_name="$2"
+    if [[ ! -f "$file" ]]; then
+        echo ""
+        return
+    fi
+    # Match: var_name: "version" or var_name: version (no Jinja templates)
+    local version
+    version=$(grep -E "^\s+${var_name}:\s+" "$file" 2>/dev/null \
+        | grep -v '{{' \
+        | head -1 \
+        | sed -E 's/^[[:space:]]*[^:]+:[[:space:]]*"?([^"[:space:]]+)"?.*/\1/')
+    echo "$version"
+}
+
 precheck_registry() {
     log_section "Pre-check: Validating Registry"
 
@@ -259,7 +288,7 @@ precheck_registry() {
     local acr_name="${acr_registry%%.*}"
 
     # Check helper: verify a repository has at least one tag
-    check_artifact() {
+    check_repo_exists() {
         local repo="$1"
         local tag_count
         tag_count=$(az acr repository show-tags --name "$acr_name" --repository "$repo" --output tsv 2>/dev/null | wc -l)
@@ -276,17 +305,60 @@ precheck_registry() {
         fi
     }
 
-    # Check helm charts
-    log "Checking Helm charts..."
-    for chart in "${REQUIRED_CHARTS[@]}"; do
-        check_artifact "$chart" || true
+    # Check helper: verify a specific tag exists in a repository
+    check_chart_version() {
+        local repo="$1"
+        local version="$2"
+        local tags
+        tags=$(az acr repository show-tags --name "$acr_name" --repository "$repo" --output tsv 2>/dev/null)
+
+        if echo "$tags" | grep -qx "$version"; then
+            log "  ${GREEN}[OK]${NC} $repo:$version"
+            passed=$((passed + 1))
+            return 0
+        elif [[ -z "$tags" ]]; then
+            log "  ${RED}[MISSING]${NC} $repo (repo not found)"
+            failed=$((failed + 1))
+            missing_items+=("$repo (repo missing)")
+            return 1
+        else
+            local latest
+            latest=$(echo "$tags" | sort -V | tail -1)
+            log "  ${RED}[MISSING]${NC} $repo:$version (latest: $latest)"
+            failed=$((failed + 1))
+            missing_items+=("$repo:$version (latest in registry: $latest)")
+            return 1
+        fi
+    }
+
+    # --- Version-specific checks (infrastructure charts) ---
+    log "Checking infrastructure chart versions (from BYOC role files)..."
+    for entry in "${CHART_VERSION_SOURCES[@]}"; do
+        IFS='|' read -r chart_repo version_file var_name <<< "$entry"
+        local full_path="${BYOC_PATH}/${version_file}"
+        local version
+        version=$(extract_byoc_version "$full_path" "$var_name")
+
+        if [[ -z "$version" ]]; then
+            log "  ${YELLOW}[SKIP]${NC} $chart_repo (could not extract version from $version_file)"
+            continue
+        fi
+
+        check_chart_version "$chart_repo" "$version" || true
     done
 
-    # Check container images
+    # --- Repo existence checks (platform charts) ---
+    echo ""
+    log "Checking platform charts (repo existence)..."
+    for chart in "${REQUIRED_CHARTS[@]}"; do
+        check_repo_exists "$chart" || true
+    done
+
+    # --- Container images ---
     echo ""
     log "Checking container images..."
     for image in "${REQUIRED_IMAGES[@]}"; do
-        check_artifact "$image" || true
+        check_repo_exists "$image" || true
     done
 
     # Summary
@@ -524,6 +596,19 @@ install_byoc() {
     cd "$BYOC_PATH"
 
     local values_file="$SCRIPT_DIR/byoc-values.yaml"
+
+    # Clean up any stale helm releases (e.g., from a previous --skip-destroy run)
+    # pending-install/pending-upgrade states block new installs
+    local stale_releases
+    stale_releases=$(helm list -n quix --kube-context "$CLUSTER_CONTEXT" -a --filter 'quixplatform' -q 2>/dev/null || true)
+    if [[ -n "$stale_releases" ]]; then
+        log "Cleaning up stale helm releases..."
+        for release in $stale_releases; do
+            log "  Uninstalling stale release: $release"
+            helm uninstall "$release" -n quix --kube-context "$CLUSTER_CONTEXT" --wait 2>/dev/null || true
+        done
+        log_success "Stale releases cleaned up"
+    fi
 
     log "Running BYOC installer..."
     log "This typically takes 10-15 minutes..."
