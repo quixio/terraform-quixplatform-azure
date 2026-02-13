@@ -46,3 +46,9 @@ variable "workload_node_count" {
     error_message = "workload_node_count must be between 2 and 10."
   }
 }
+
+variable "acr_id" {
+  description = "Resource ID of the Azure Container Registry to attach (grants AcrPull to kubelet identity)"
+  type        = string
+  default     = "/subscriptions/9f038d11-a56f-4156-a0ce-6041f2a4b8ab/resourceGroups/Quix/providers/Microsoft.ContainerRegistry/registries/quixregistry"
+}

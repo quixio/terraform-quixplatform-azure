@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 #
-# healthcheck.sh - Comprehensive Quix platform health checker
+# healthcheck.sh - Quix platform health checker (configuration-aware)
+#
+# Reads the deployed platform-variables configmap to determine which
+# components are enabled, then only checks those components.
 #
 # Checks (in dependency order):
 #   1. Registry connectivity & credentials
-#   2. Infrastructure (cert-manager, traefik, mongo, kafka)
-#   3. Platform core services
-#   4. Full platform health
+#   2. Infrastructure (traefik, mongo, gitea, kafka - based on config)
+#   3. Platform core services (when platformEnabled)
+#   4. Full platform health (pod ratios, LB)
 #
 # Exit codes:
 #   0 - All checks passed
@@ -61,7 +64,7 @@ log_check() {
     fi
 
     case "$status" in
-        PASS) echo -e "${GREEN}[PASS]${NC} $name" ;;
+        PASS) echo -e "${GREEN}[PASS]${NC} $name${details:+ - $details}" ;;
         FAIL) echo -e "${RED}[FAIL]${NC} $name${details:+ - $details}" ;;
         WARN) echo -e "${YELLOW}[WARN]${NC} $name${details:+ - $details}" ;;
         SKIP) echo -e "${BLUE}[SKIP]${NC} $name${details:+ - $details}" ;;
@@ -76,6 +79,37 @@ log_section() {
 
 verbose() {
     [[ "$VERBOSE" == "true" ]] && echo "  $1"
+}
+
+#############################################################################
+# Configuration: read what's enabled from the deployed configmap
+#############################################################################
+
+get_config_value() {
+    local key="$1"
+    local default="${2:-}"
+    kubectl get configmap platform-variables -n quix -o jsonpath="{.data.$key}" 2>/dev/null || echo "$default"
+}
+
+load_config() {
+    # Read deployment configuration from the platform-variables configmap.
+    # This tells us which components are enabled and should be checked.
+    CERT_MANAGER_ENABLED=$(get_config_value "cert_manager_enabled" "false")
+    INGRESS_ENABLED=$(get_config_value "ingress_enabled" "true")
+    MONGODB_ENABLED=$(get_config_value "mongodb_enabled" "true")
+    GITEA_ENABLED=$(get_config_value "gitea_enabled" "true")
+    MONITORING_ENABLED=$(get_config_value "monitoring_enabled" "true")
+    LOGGING_ENABLED=$(get_config_value "logging_enabled" "true")
+    PLATFORM_ENABLED=$(get_config_value "platform_enabled" "true")
+    INTERNAL_REGISTRY_ENABLED=$(get_config_value "internal_registry_enabled" "false")
+
+    if [[ "$VERBOSE" == "true" && "$JSON_OUTPUT" != "true" ]]; then
+        echo "Configuration (from platform-variables):"
+        echo "  cert-manager=$CERT_MANAGER_ENABLED ingress=$INGRESS_ENABLED"
+        echo "  mongodb=$MONGODB_ENABLED gitea=$GITEA_ENABLED"
+        echo "  monitoring=$MONITORING_ENABLED logging=$LOGGING_ENABLED"
+        echo "  platform=$PLATFORM_ENABLED internal-registry=$INTERNAL_REGISTRY_ENABLED"
+    fi
 }
 
 #############################################################################
@@ -111,7 +145,7 @@ check_registry() {
     local test_pod
     test_pod=$(kubectl get pods -n quix -o name 2>/dev/null | head -1)
     if [[ -n "$test_pod" ]]; then
-        log_check "Registry reachable" "PASS" "pods running means registry worked"
+        log_check "Registry reachable" "PASS"
     fi
 }
 
@@ -155,7 +189,7 @@ check_kafka() {
     ready=$(kubectl get kafka "$name" -n "$namespace" -o jsonpath='{.status.conditions[?(@.type=="Ready")].status}' 2>/dev/null || echo "")
 
     if [[ "$ready" == "True" ]]; then
-        log_check "Kafka $name" "PASS" "Ready"
+        log_check "Kafka $name" "PASS"
         return 0
     else
         local message
@@ -170,32 +204,48 @@ check_infrastructure() {
 
     local infra_ok=true
 
-    # Cert-manager
-    check_infra_component "cert-manager" "${NAMESPACE_PREFIX}-cert-manager" 3 || infra_ok=false
+    # Cert-manager: only check if enabled
+    if [[ "$CERT_MANAGER_ENABLED" == "true" ]]; then
+        check_infra_component "cert-manager" "${NAMESPACE_PREFIX}-cert-manager" 3 || infra_ok=false
+    else
+        log_check "cert-manager" "SKIP" "not enabled"
+    fi
 
     # Traefik
-    check_infra_component "traefik" "${NAMESPACE_PREFIX}-ingress-traefik" 1 || infra_ok=false
+    if [[ "$INGRESS_ENABLED" == "true" ]]; then
+        check_infra_component "traefik" "${NAMESPACE_PREFIX}-ingress-traefik" 1 || infra_ok=false
+    else
+        log_check "traefik" "SKIP" "not enabled"
+    fi
 
     # MongoDB
-    check_infra_component "mongodb" "${NAMESPACE_PREFIX}-mongo" 1 || infra_ok=false
+    if [[ "$MONGODB_ENABLED" == "true" ]]; then
+        check_infra_component "mongodb" "${NAMESPACE_PREFIX}-mongo" 1 || infra_ok=false
 
-    # Verify mongo is actually responding
-    local mongo_ready
-    mongo_ready=$(kubectl exec -n "${NAMESPACE_PREFIX}-mongo" mongo-mongodb-0 -- mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -c "ok" || echo "0")
-    if [[ "$mongo_ready" -gt 0 ]]; then
-        log_check "mongodb responsive" "PASS"
+        # Verify mongo is actually responding
+        local mongo_ready
+        mongo_ready=$(kubectl exec -n "${NAMESPACE_PREFIX}-mongo" mongo-mongodb-0 -- mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -c "ok" || echo "0")
+        if [[ "$mongo_ready" -gt 0 ]]; then
+            log_check "mongodb responsive" "PASS"
+        else
+            log_check "mongodb responsive" "WARN" "ping failed"
+            WARNINGS=true
+        fi
     else
-        log_check "mongodb responsive" "WARN" "ping failed"
-        WARNINGS=true
+        log_check "mongodb" "SKIP" "not enabled"
     fi
 
     # Gitea
-    check_infra_component "gitea" "${NAMESPACE_PREFIX}-gitea" 1 || infra_ok=false
+    if [[ "$GITEA_ENABLED" == "true" ]]; then
+        check_infra_component "gitea" "${NAMESPACE_PREFIX}-gitea" 1 || infra_ok=false
+    else
+        log_check "gitea" "SKIP" "not enabled"
+    fi
 
-    # Kafka Operator
+    # Kafka Operator (always deployed when there are kafka clusters)
     check_infra_component "kafka-operator" "${NAMESPACE_PREFIX}-kafka-operator" 1 || infra_ok=false
 
-    # Kafka clusters
+    # Kafka clusters (discover dynamically)
     for ns in $(kubectl get ns -o name 2>/dev/null | grep "${NAMESPACE_PREFIX}-kafka-" | grep -v operator | cut -d/ -f2); do
         local kafka_name
         kafka_name=$(kubectl get kafka -n "$ns" -o name 2>/dev/null | head -1 | cut -d/ -f2)
@@ -203,6 +253,13 @@ check_infrastructure() {
             check_kafka "$ns" "$kafka_name" || infra_ok=false
         fi
     done
+
+    # Monitoring
+    if [[ "$MONITORING_ENABLED" == "true" ]]; then
+        check_infra_component "monitoring" "${NAMESPACE_PREFIX}-prometheus" 3 || infra_ok=false
+    else
+        log_check "monitoring" "SKIP" "not enabled"
+    fi
 
     if [[ "$infra_ok" == "false" ]]; then
         CRITICAL_FAIL=true
@@ -239,11 +296,16 @@ check_platform_service() {
 }
 
 check_platform_core() {
+    if [[ "$PLATFORM_ENABLED" != "true" ]]; then
+        log_section "Platform Core Services"
+        log_check "platform" "SKIP" "not enabled"
+        return
+    fi
+
     log_section "Platform Core Services"
 
     local core_ok=true
 
-    # Critical services that must be running
     check_platform_service "auth-api" 1 || core_ok=false
     check_platform_service "portal-api" 1 || core_ok=false
     check_platform_service "portal-frontend" 1 || core_ok=false
@@ -262,22 +324,22 @@ check_platform_core() {
 check_platform_full() {
     log_section "Platform Full Health"
 
-    # Check for CrashLoopBackOff
+    # Check for CrashLoopBackOff across all quix namespaces
     local crash_count
-    crash_count=$(kubectl get pods -n quix --no-headers 2>/dev/null | grep -c "CrashLoopBackOff" || true)
+    crash_count=$(kubectl get pods -A --no-headers 2>/dev/null | grep "^quix" | grep -c "CrashLoopBackOff" || true)
     crash_count=$(echo "$crash_count" | tr -d '[:space:]')
     crash_count=${crash_count:-0}
     if [[ "$crash_count" -gt 0 ]]; then
         log_check "No CrashLoopBackOff" "WARN" "$crash_count pods crashing"
-        verbose "$(kubectl get pods -n quix | grep CrashLoopBackOff | head -5)"
+        verbose "$(kubectl get pods -A | grep CrashLoopBackOff | head -5)"
         WARNINGS=true
     else
         log_check "No CrashLoopBackOff" "PASS"
     fi
 
-    # Check for pending pods
+    # Check for pending pods across all quix namespaces
     local pending_count
-    pending_count=$(kubectl get pods -n quix --no-headers 2>/dev/null | grep -c "Pending" || true)
+    pending_count=$(kubectl get pods -A --no-headers 2>/dev/null | grep "^quix" | grep -c "Pending" || true)
     pending_count=$(echo "$pending_count" | tr -d '[:space:]')
     pending_count=${pending_count:-0}
     if [[ "$pending_count" -gt 0 ]]; then
@@ -287,12 +349,12 @@ check_platform_full() {
         log_check "No Pending pods" "PASS"
     fi
 
-    # Overall pod health ratio
+    # Overall pod health ratio (all quix-* namespaces)
     local total_pods ready_pods
-    total_pods=$(kubectl get pods -n quix --no-headers 2>/dev/null | grep -v Completed | wc -l)
+    total_pods=$(kubectl get pods -A --no-headers 2>/dev/null | grep "^quix" | grep -v Completed | wc -l)
     total_pods=$(echo "$total_pods" | tr -d '[:space:]')
     total_pods=${total_pods:-0}
-    ready_pods=$(kubectl get pods -n quix --no-headers 2>/dev/null | grep -v Completed | grep -c "Running" || true)
+    ready_pods=$(kubectl get pods -A --no-headers 2>/dev/null | grep "^quix" | grep -v Completed | grep -c "Running" || true)
     ready_pods=$(echo "$ready_pods" | tr -d '[:space:]')
     ready_pods=${ready_pods:-0}
 
@@ -311,14 +373,16 @@ check_platform_full() {
         PLATFORM_FAIL=true
     fi
 
-    # LoadBalancer check
-    local lb_ip
-    lb_ip=$(kubectl get svc -n "${NAMESPACE_PREFIX}-ingress-traefik" quix-traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
-    if [[ -n "$lb_ip" ]]; then
-        log_check "LoadBalancer IP" "PASS" "$lb_ip"
-    else
-        log_check "LoadBalancer IP" "WARN" "no external IP assigned"
-        WARNINGS=true
+    # LoadBalancer check (only when ingress enabled)
+    if [[ "$INGRESS_ENABLED" == "true" ]]; then
+        local lb_ip
+        lb_ip=$(kubectl get svc -n "${NAMESPACE_PREFIX}-ingress-traefik" quix-traefik -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+        if [[ -n "$lb_ip" ]]; then
+            log_check "LoadBalancer IP" "PASS" "$lb_ip"
+        else
+            log_check "LoadBalancer IP" "WARN" "no external IP assigned"
+            WARNINGS=true
+        fi
     fi
 }
 
@@ -334,7 +398,7 @@ diagnose_failures() {
 
     # Show recent events with issues
     local problem_events
-    problem_events=$(kubectl get events -A --sort-by='.lastTimestamp' 2>/dev/null | grep -iE "failed|error|backoff|pull|timeout" | tail -5)
+    problem_events=$(kubectl get events -A --sort-by='.lastTimestamp' 2>/dev/null | grep -iE "failed|error|backoff|pull|timeout" | tail -5 || true)
     if [[ -n "$problem_events" ]]; then
         echo -e "${YELLOW}Recent problem events:${NC}"
         echo "$problem_events"
@@ -342,7 +406,7 @@ diagnose_failures() {
 
     # Show unhealthy pods
     local unhealthy
-    unhealthy=$(kubectl get pods -A --no-headers 2>/dev/null | grep -v "Running\|Completed" | grep quix | head -5)
+    unhealthy=$(kubectl get pods -A --no-headers 2>/dev/null | grep "^quix" | grep -v "Running\|Completed" | head -5 || true)
     if [[ -n "$unhealthy" ]]; then
         echo ""
         echo -e "${YELLOW}Unhealthy pods:${NC}"
@@ -375,7 +439,10 @@ main() {
     [[ "$JSON_OUTPUT" != "true" ]] && echo "Quix Platform Health Check"
     [[ "$JSON_OUTPUT" != "true" ]] && echo "=========================="
 
-    # Run all checks (don't exit early on failures due to set -e)
+    # Load configuration from deployed configmap
+    load_config
+
+    # Run checks based on what's enabled
     check_registry || true
     check_infrastructure || true
     check_platform_core || true

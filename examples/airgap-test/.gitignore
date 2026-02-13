@@ -10,3 +10,6 @@ byoc-values.yaml
 # Local vars (may contain secrets)
 terraform.tfvars
 *.auto.tfvars
+
+# Backend override (generated for local runs)
+backend_override.tf

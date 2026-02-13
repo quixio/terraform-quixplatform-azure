@@ -199,24 +199,25 @@ validate_prerequisites() {
 
 # Charts and images that must exist in the registry for a successful deployment.
 # If any are missing, we abort before spending 10+ minutes on terraform apply.
+# Paths must match target paths in scripts/repomirror/config/*.json
 REQUIRED_CHARTS=(
     "helm/quixplatform-manager"
     "helm/workspace-service"
     "helm/deployments-service"
     "helm/portal-api"
-    "helm/portal-frontend"
+    "helm/portal"
     "helm/admin-ui"
     "helm/streaming-reader"
     "helm/git-api"
-    "helm/cert-manager"
-    "helm/traefik"
-    "helm/mongodb"
-    "helm/strimzi-kafka-operator"
-    "helm/grafana"
-    "helm/prometheus"
-    "helm/loki"
-    "helm/minio"
-    "helm/gitea"
+    "helm/jetstack/cert-manager"
+    "helm/traefik/traefik"
+    "helm/bitnami/mongodb"
+    "helm/strimzi/strimzi-kafka-operator"
+    "helm/prometheus-community/kube-prometheus-stack"
+    "helm/grafana/loki"
+    "helm/bitnami/minio"
+    "helm/gitea/gitea"
+    "helm/keycloak"
 )
 
 REQUIRED_IMAGES=(
@@ -224,7 +225,7 @@ REQUIRED_IMAGES=(
     "workspace-service"
     "deployments-service"
     "portal-api"
-    "portal-frontend"
+    "portalui"
     "admin-ui"
     "jetstack/cert-manager-controller"
     "jetstack/cert-manager-webhook"
@@ -232,11 +233,11 @@ REQUIRED_IMAGES=(
     "traefik/traefik"
     "bitnami/mongodb"
     "strimzi/operator"
-    "strimzi/kafka"
+    "strimzi/quix-kafka"
     "grafana/grafana"
     "prometheus/prometheus"
     "grafana/loki"
-    "minio/minio"
+    "bitnami/minio"
 )
 
 precheck_registry() {
@@ -247,32 +248,24 @@ precheck_registry() {
     local failed=0
     local missing_items=()
 
-    # Authenticate to ACR
-    log "Authenticating to ${acr_registry}..."
-    local token
-    token=$(curl -sf -u "${QUIX_ACR_USERNAME}:${QUIX_ACR_PASSWORD}" \
-        "https://${acr_registry}/oauth2/token?service=${acr_registry}&scope=registry:catalog:*" \
-        | jq -r '.access_token // empty' 2>/dev/null || true)
-
-    local auth_header
-    if [[ -n "$token" ]]; then
-        auth_header="Bearer ${token}"
-    else
-        auth_header="Basic $(echo -n "${QUIX_ACR_USERNAME}:${QUIX_ACR_PASSWORD}" | base64)"
+    # Verify Azure CLI can access the registry
+    log "Verifying access to ${acr_registry}..."
+    if ! az acr repository list --name "${acr_registry%%.*}" --output tsv &>/dev/null; then
+        log_error "Cannot access ${acr_registry} - check Azure CLI login and permissions"
+        return 1
     fi
+    log "Registry access verified"
+
+    local acr_name="${acr_registry%%.*}"
 
     # Check helper: verify a repository has at least one tag
     check_artifact() {
         local repo="$1"
-        local tags
-        tags=$(curl -sf -H "Authorization: ${auth_header}" \
-            "https://${acr_registry}/v2/${repo}/tags/list" 2>/dev/null \
-            | jq -r '.tags // empty')
+        local tag_count
+        tag_count=$(az acr repository show-tags --name "$acr_name" --repository "$repo" --output tsv 2>/dev/null | wc -l)
 
-        if [[ -n "$tags" && "$tags" != "null" ]]; then
-            local count
-            count=$(echo "$tags" | jq 'length')
-            log "  ${GREEN}[OK]${NC} $repo ($count tags)"
+        if [[ "$tag_count" -gt 0 ]]; then
+            log "  ${GREEN}[OK]${NC} $repo ($tag_count tags)"
             passed=$((passed + 1))
             return 0
         else
@@ -385,24 +378,18 @@ generate_byoc_values() {
         return 1
     fi
 
-    # Generate values by replacing placeholders
+    # Generate values by replacing placeholders.
+    # Each CHANGEME must be replaced with the correct value for its field.
+    # Order matters: specific patterns first to avoid blanket replacement.
     sed \
-        -e "s/CHANGEME_CUSTOMER_NAME/airgap-test-${RUN_ID}/g" \
-        -e "s/CHANGEME/${QUIX_ACR_PASSWORD}/g" \
-        -e "s/airgap-test-CHANGEME/airgap-test-${RUN_ID}/g" \
-        "$template_file" > "$values_file.tmp"
-
-    # Use yq or python to properly set values if available, otherwise sed
-    cat "$values_file.tmp" | \
-        sed "s|clientId: CHANGEME|clientId: ${QUIX_ZIP_CLIENT_ID}|g" | \
-        sed "s|clientSecret: CHANGEME|clientSecret: ${QUIX_ZIP_CLIENT_SECRET}|g" | \
-        sed "s|tenantId: CHANGEME|tenantId: ${QUIX_ZIP_TENANT_ID}|g" | \
-        sed "s|privateDockerRegistryPassword: CHANGEME|privateDockerRegistryPassword: ${QUIX_ACR_PASSWORD}|g" | \
-        sed "s|privateDockerRegistryUsername: CHANGEME|privateDockerRegistryUsername: ${QUIX_ACR_USERNAME}|g" | \
-        sed "s|licenseKey: CHANGEME|licenseKey: ${QUIX_LICENSE_KEY}|g" \
-        > "$values_file"
-
-    rm -f "$values_file.tmp"
+        -e "s|customerName: airgap-test-CHANGEME|customerName: airgap-test-${RUN_ID}|g" \
+        -e "s|clientId: CHANGEME|clientId: ${QUIX_ZIP_CLIENT_ID}|g" \
+        -e "s|clientSecret: CHANGEME|clientSecret: ${QUIX_ZIP_CLIENT_SECRET}|g" \
+        -e "s|tenantId: CHANGEME|tenantId: ${QUIX_ZIP_TENANT_ID}|g" \
+        -e "s|privateDockerRegistryUsername: CHANGEME|privateDockerRegistryUsername: ${QUIX_ACR_USERNAME}|g" \
+        -e "s|privateDockerRegistryPassword: CHANGEME|privateDockerRegistryPassword: ${QUIX_ACR_PASSWORD}|g" \
+        -e "s|licenseKey: CHANGEME|licenseKey: ${QUIX_LICENSE_KEY}|g" \
+        "$template_file" > "$values_file"
 
     log_success "Generated: $values_file"
 }
@@ -416,7 +403,19 @@ terraform_init() {
 
     cd "$SCRIPT_DIR"
 
-    terraform init -input=false
+    # In CI/CD, backend config is passed via TF_CLI_ARGS_init or -backend-config.
+    # For local runs, override the azurerm backend with local state.
+    if [[ -z "${TF_CLI_ARGS_init:-}" ]] && [[ ! -f backend.tfvars ]]; then
+        log "No remote backend configured, using local state"
+        cat > backend_override.tf <<'EOF'
+terraform {
+  backend "local" {}
+}
+EOF
+        terraform init -input=false -reconfigure
+    else
+        terraform init -input=false
+    fi
 
     log_success "Terraform initialized"
 }
