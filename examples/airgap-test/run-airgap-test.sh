@@ -610,6 +610,14 @@ install_byoc() {
         log_success "Stale releases cleaned up"
     fi
 
+    # Pre-authenticate helm to the ACR. dev.sh tries az acr login which
+    # doesn't work with service principals (no docker daemon). Use helm
+    # registry login with the credentials from the variable group instead.
+    log "Authenticating helm to quixregistry.azurecr.io..."
+    echo "$QUIX_ACR_PASSWORD" | helm registry login quixregistry.azurecr.io \
+        --username "$QUIX_ACR_USERNAME" --password-stdin
+    log_success "Helm authenticated to ACR"
+
     log "Running BYOC installer..."
     log "This typically takes 10-15 minutes..."
 

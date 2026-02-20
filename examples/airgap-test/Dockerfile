@@ -38,6 +38,8 @@ ARG KUBECTL_VERSION=1.33.0
 ARG HELM_VERSION=3.14.0
 
 # Install base packages
+# shadow-utils: provides su/useradd (required by Azure DevOps container job init)
+# sudo: required by Azure DevOps to grant pipeline user permissions
 RUN tdnf install -y \
     unzip \
     curl \
@@ -48,6 +50,9 @@ RUN tdnf install -y \
     gawk \
     diffutils \
     ca-certificates \
+    shadow-utils \
+    sudo \
+    util-linux \
     && tdnf clean all
 
 # Install yq (YAML processor - required by dev.sh)
@@ -85,5 +90,8 @@ RUN echo "=== Tool Versions ===" \
 # Set bash as default shell for better script compatibility
 SHELL ["/bin/bash", "-c"]
 
-# Default entrypoint
-ENTRYPOINT ["/bin/bash"]
+# Azure DevOps container jobs expect /home/vsts to exist as the working directory
+RUN mkdir -p /home/vsts && chmod 777 /home/vsts
+
+# No ENTRYPOINT/CMD - Azure DevOps manages the container lifecycle for container jobs.
+# For local use, run with: docker run -it ... /bin/bash
