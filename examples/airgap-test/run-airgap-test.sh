@@ -621,6 +621,10 @@ install_byoc() {
     log "Running BYOC installer..."
     log "This typically takes 10-15 minutes..."
 
+    # Override chart registry: dev.sh defaults to quixcontainerregistry but
+    # airgap charts are mirrored to quixregistry
+    export QUIX_CHART_REGISTRY="quixregistry.azurecr.io"
+
     # Run install with timeout
     if timeout "$INSTALL_TIMEOUT" ./dev.sh install \
         -f "$values_file" \
