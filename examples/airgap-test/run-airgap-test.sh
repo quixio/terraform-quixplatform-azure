@@ -529,10 +529,14 @@ get_credentials() {
     local cluster_name="aks-airgap-${RUN_ID}"
     local resource_group="rg-quix-airgap-${RUN_ID}"
 
+    # Use --admin to get kubeconfig with client certificates (long-lived).
+    # Without --admin, az CLI may embed a short-lived bearer token that
+    # expires mid-install, killing helm's connection to the API server.
     az aks get-credentials \
         --resource-group "$resource_group" \
         --name "$cluster_name" \
-        --overwrite-existing
+        --overwrite-existing \
+        --admin
 
     CLUSTER_CONTEXT="$cluster_name"
 
