@@ -538,7 +538,8 @@ get_credentials() {
         --overwrite-existing \
         --admin
 
-    CLUSTER_CONTEXT="$cluster_name"
+    # --admin appends "-admin" to the context name
+    CLUSTER_CONTEXT="${cluster_name}-admin"
 
     # Verify connectivity
     if ! kubectl --context="$CLUSTER_CONTEXT" get nodes &> /dev/null; then
