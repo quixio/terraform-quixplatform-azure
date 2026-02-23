@@ -33,10 +33,12 @@ global:
   privateDockerRegistryUsername: CHANGEME
   rootDomain: airgap-test.internal
   tier: BringYourOwnCluster
-  # IMPORTANT: Fix helm chart path for airgap registry
-  # Without this, URL becomes registry/helm and workspace-service appends helm/ = double helm
-  # Charts are at quixregistry.azurecr.io/helm/streaming-reader, not helm/helm/streaming-reader
-  helmNamespace: ""
+  # Helm chart OCI path prefix within the registry.
+  # Charts live at quixregistry.azurecr.io/helm/<chart-name>
+  # Ansible installer defaults empty string to "helm" via Jinja2 default(value, true),
+  # but workspace-service reads this literally via platform_values.yaml.j2 default(value)
+  # which does NOT treat empty string as falsy. So we must set this explicitly.
+  helmNamespace: "helm"
 image:
   containerRegistry: quixregistry.azurecr.io
   pullPolicy: IfNotPresent
