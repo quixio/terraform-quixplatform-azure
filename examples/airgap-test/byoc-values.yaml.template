@@ -1,5 +1,7 @@
 # BYOC Values Template for Airgap Test Cluster
-# Copy this file to byoc-values.yaml and fill in credentials
+#
+# Uses the fat airgap installer image which has all BYOC ansible files,
+# helm charts, and dependencies baked in. No zip download needed at runtime.
 #
 # Required settings discovered during testing:
 # - monitoringEnabled: "true" - deploys prometheus/grafana
@@ -10,7 +12,7 @@
 # All images must come from quixregistry.azurecr.io
 
 global:
-  byocZipVersion: quixbyoc-1.15.202601261-20260116.3-ee.zip
+  byocZipVersion: ""
   cloudProvider: azure
   customerName: airgap-test-CHANGEME
   destinationDirectory: /app/ansible
@@ -22,12 +24,13 @@ global:
   kubeContext: agent-internal
   namespace: quix
   namespacePrefix: quix
+  # Disabled: airgap installer has everything baked in, no zip download needed
   privateByocStorageAccount:
-    clientId: CHANGEME
-    clientSecret: CHANGEME
-    enabled: true
+    clientId: ""
+    clientSecret: ""
+    enabled: false
     secretName: zip-secret
-    tenantId: CHANGEME
+    tenantId: ""
   privateDockerRegistryPassword: CHANGEME
   privateDockerRegistryUrl: quixregistry.azurecr.io
   privateDockerRegistryUsername: CHANGEME
@@ -43,7 +46,8 @@ image:
   containerRegistry: quixregistry.azurecr.io
   pullPolicy: IfNotPresent
   service: quixplatform-ansible-builder
-  tag: 1.6.7
+  # Substituted by run-airgap-test.sh from INSTALLER_TAG env var
+  tag: INSTALLER_TAG
   env:
     # Increase per-role timeout from default 600s (10m) to 1200s (20m).
     # kube-prometheus-stack needs >10 minutes on spot instances.

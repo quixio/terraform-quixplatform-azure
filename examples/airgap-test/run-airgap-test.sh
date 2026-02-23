@@ -17,15 +17,13 @@
 # Required Environment Variables:
 #   QUIX_ACR_USERNAME    - Username for quixregistry.azurecr.io
 #   QUIX_ACR_PASSWORD    - Password for quixregistry.azurecr.io
-#   QUIX_ZIP_CLIENT_ID   - Azure AD client ID for BYOC zip storage
-#   QUIX_ZIP_CLIENT_SECRET - Azure AD client secret
-#   QUIX_ZIP_TENANT_ID   - Azure AD tenant ID
 #   QUIX_LICENSE_KEY     - License key for Quix platform
 #
 # Optional Environment Variables:
+#   INSTALLER_TAG        - Airgap installer image tag (default: 1.6.7-0.1.20260217631-airgap)
 #   BYOC_PATH            - Path to Infrastructure.BYOC repo (default: ../../../Infrastructure.BYOC)
 #   LOCATION             - Azure region (default: westeurope)
-#   KUBERNETES_VERSION   - AKS version (default: 1.30)
+#   KUBERNETES_VERSION   - AKS version (default: 1.33.6)
 #
 
 set -euo pipefail
@@ -47,6 +45,7 @@ BYOC_PATH="${BYOC_PATH:-}"
 LOCATION="${LOCATION:-westeurope}"
 KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.33.6}"
 INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-3600}" # 60 minutes
+INSTALLER_TAG="${INSTALLER_TAG:-1.6.7-0.1.20260217631-airgap}"
 
 # Tracking
 TERRAFORM_APPLIED=false
@@ -148,12 +147,11 @@ validate_prerequisites() {
     fi
 
     # Check required environment variables
+    # ACR creds and license are always required.
+    # ZIP creds are NOT needed - the airgap installer has everything baked in.
     local required_vars=(
         "QUIX_ACR_USERNAME"
         "QUIX_ACR_PASSWORD"
-        "QUIX_ZIP_CLIENT_ID"
-        "QUIX_ZIP_CLIENT_SECRET"
-        "QUIX_ZIP_TENANT_ID"
         "QUIX_LICENSE_KEY"
     )
 
@@ -451,17 +449,16 @@ generate_byoc_values() {
     fi
 
     # Generate values by replacing placeholders.
-    # Each CHANGEME must be replaced with the correct value for its field.
-    # Order matters: specific patterns first to avoid blanket replacement.
+    # The airgap installer has BYOC files baked in, so no zip credentials needed.
     sed \
         -e "s|customerName: airgap-test-CHANGEME|customerName: airgap-test-${RUN_ID}|g" \
-        -e "s|clientId: CHANGEME|clientId: ${QUIX_ZIP_CLIENT_ID}|g" \
-        -e "s|clientSecret: CHANGEME|clientSecret: ${QUIX_ZIP_CLIENT_SECRET}|g" \
-        -e "s|tenantId: CHANGEME|tenantId: ${QUIX_ZIP_TENANT_ID}|g" \
+        -e "s|tag: INSTALLER_TAG|tag: ${INSTALLER_TAG}|g" \
         -e "s|privateDockerRegistryUsername: CHANGEME|privateDockerRegistryUsername: ${QUIX_ACR_USERNAME}|g" \
         -e "s|privateDockerRegistryPassword: CHANGEME|privateDockerRegistryPassword: ${QUIX_ACR_PASSWORD}|g" \
         -e "s|licenseKey: CHANGEME|licenseKey: ${QUIX_LICENSE_KEY}|g" \
         "$template_file" > "$values_file"
+
+    log "Installer image: quixregistry.azurecr.io/quixplatform-ansible-builder:${INSTALLER_TAG}"
 
     log_success "Generated: $values_file"
 }
@@ -762,6 +759,7 @@ main() {
 
     log_section "Airgap Test Pipeline"
     log "Run ID: $RUN_ID"
+    log "Installer Tag: $INSTALLER_TAG"
     log "Start Time: $(date)"
 
     # Set up cleanup trap
