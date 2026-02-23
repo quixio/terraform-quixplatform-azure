@@ -632,9 +632,13 @@ install_byoc() {
     # minutes). If dev.sh exits non-zero, fall back to polling the installer
     # Job directly - the pod inside the cluster keeps running regardless.
     local dev_exit=0
+    # --no-local-files: skip the dev convenience of pre-downloading charts
+    # to a PVC. Instead, the installer pod pulls charts directly from the
+    # registry using registrypullsecret - same path as a real customer.
     timeout "$INSTALL_TIMEOUT" ./dev.sh install \
         -f "$values_file" \
-        --context "$CLUSTER_CONTEXT" 2>&1 || dev_exit=$?
+        --context "$CLUSTER_CONTEXT" \
+        --no-local-files 2>&1 || dev_exit=$?
 
     if [[ $dev_exit -eq 0 ]]; then
         log_success "BYOC installation completed"
