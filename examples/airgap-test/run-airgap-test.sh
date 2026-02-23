@@ -625,15 +625,73 @@ install_byoc() {
     # airgap charts are mirrored to quixregistry
     export QUIX_CHART_REGISTRY="quixregistry.azurecr.io"
 
-    # Run install with timeout
-    if timeout "$INSTALL_TIMEOUT" ./dev.sh install \
+    # Run install. dev.sh backgrounds helm and streams pod logs, but the log
+    # stream can disconnect in long-running installs (e.g. monitoring takes 12+
+    # minutes). If dev.sh exits non-zero, fall back to polling the installer
+    # Job directly - the pod inside the cluster keeps running regardless.
+    local dev_exit=0
+    timeout "$INSTALL_TIMEOUT" ./dev.sh install \
         -f "$values_file" \
-        --context "$CLUSTER_CONTEXT" 2>&1; then
+        --context "$CLUSTER_CONTEXT" 2>&1 || dev_exit=$?
+
+    if [[ $dev_exit -eq 0 ]]; then
         log_success "BYOC installation completed"
-    else
-        log_error "BYOC installation failed or timed out"
+        return 0
+    fi
+
+    log_warn "dev.sh exited with code $dev_exit - checking installer job status..."
+    wait_for_installer_job
+}
+
+################################################################################
+# Wait for installer job (fallback when dev.sh log stream breaks)
+################################################################################
+
+wait_for_installer_job() {
+    local job_name="quixplatform-manager-job"
+    local namespace="quix"
+    local poll_interval=15
+    local elapsed=0
+
+    # Check if the job even exists
+    if ! kubectl --context="$CLUSTER_CONTEXT" get job "$job_name" -n "$namespace" &>/dev/null; then
+        log_error "Installer job not found - install likely failed before job creation"
         return 1
     fi
+
+    log "Polling installer job status (dev.sh lost connection but pod may still be running)..."
+
+    while [[ $elapsed -lt $INSTALL_TIMEOUT ]]; do
+        local status
+        status=$(kubectl --context="$CLUSTER_CONTEXT" get job "$job_name" -n "$namespace" \
+            -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null || echo "")
+        local failed
+        failed=$(kubectl --context="$CLUSTER_CONTEXT" get job "$job_name" -n "$namespace" \
+            -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || echo "")
+
+        if [[ "$status" == "True" ]]; then
+            log_success "Installer job completed successfully"
+            return 0
+        fi
+
+        if [[ "$failed" == "True" ]]; then
+            log_error "Installer job failed"
+            kubectl --context="$CLUSTER_CONTEXT" logs "job/$job_name" -n "$namespace" --tail=30 2>/dev/null || true
+            return 1
+        fi
+
+        # Still running - show progress
+        local active
+        active=$(kubectl --context="$CLUSTER_CONTEXT" get job "$job_name" -n "$namespace" \
+            -o jsonpath='{.status.active}' 2>/dev/null || echo "0")
+        log "  Job still running (active pods: ${active}, elapsed: ${elapsed}s)..."
+
+        sleep "$poll_interval"
+        elapsed=$((elapsed + poll_interval))
+    done
+
+    log_error "Installer job did not complete within timeout"
+    return 1
 }
 
 ################################################################################
