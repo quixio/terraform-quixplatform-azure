@@ -42,6 +42,10 @@ image:
   pullPolicy: IfNotPresent
   service: quixplatform-ansible-builder
   tag: 1.6.7
+  env:
+    # Increase per-role timeout from default 600s (10m) to 1200s (20m).
+    # kube-prometheus-stack needs >10 minutes on spot instances.
+    ANSIBLE_TIMEOUT: "1200"
 imagePullSecret:
   enabled: true
   name: registrypullsecret
