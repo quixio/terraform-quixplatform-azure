@@ -707,6 +707,124 @@ wait_for_installer_job() {
 }
 
 ################################################################################
+# Post-install network lockdown
+#
+# During bootstrap and install, the NSG allows broad Azure service access
+# (MCR, AzureCloud global, etc.). After install completes, tighten the
+# rules to only what the running platform actually needs:
+#   - ACR francecentral (quixregistry.azurecr.io)
+#   - Storage francecentral (ACR blob backend)
+#   - AKS control plane (regional)
+#   - DNS, NTP, AAD, VNet internal
+#
+# This proves the platform operates in a genuine airgap - no hidden
+# dependencies on MCR, Docker Hub, or broad Azure IP ranges.
+################################################################################
+
+lockdown_network() {
+    log_section "Post-Install Network Lockdown"
+
+    local nsg_name="nsg-aks-airgap-${RUN_ID}"
+    local rg_name="rg-quix-airgap-${RUN_ID}"
+
+    log "Tightening NSG rules to minimum post-install set..."
+
+    # Rules to remove: broad access only needed during bootstrap/install
+    local rules_to_remove=(
+        "AllowAzureCloud"          # Global Azure Cloud - replace with regional
+        "AllowMCR"                 # MCR service tag - system images already cached
+        "AllowMCR-CDN"             # 20.0.0.0/8 + Akamai - the biggest hole
+        "AllowACR-WestEurope"      # quixregistry is in francecentral, not here
+        "AllowStorage-WestEurope"  # Only needed during bootstrap
+    )
+
+    for rule in "${rules_to_remove[@]}"; do
+        log "  Removing: $rule"
+        az network nsg rule delete \
+            --resource-group "$rg_name" \
+            --nsg-name "$nsg_name" \
+            --name "$rule" \
+            --output none 2>/dev/null || log_warn "  Rule $rule not found (already removed?)"
+    done
+
+    # Add regional AzureCloud rule to replace the global one.
+    # AKS control plane needs HTTPS to the regional Azure management plane.
+    log "  Adding: AllowAzureCloud-Regional (${LOCATION} only)"
+    az network nsg rule create \
+        --resource-group "$rg_name" \
+        --nsg-name "$nsg_name" \
+        --name "AllowAzureCloud-Regional" \
+        --priority 200 \
+        --direction Outbound \
+        --access Allow \
+        --protocol Tcp \
+        --source-address-prefixes '*' \
+        --source-port-ranges '*' \
+        --destination-address-prefixes "AzureCloud.${LOCATION}" \
+        --destination-port-ranges 443 \
+        --output none
+
+    # Log the final rule set
+    log "Final NSG rules:"
+    az network nsg rule list \
+        --resource-group "$rg_name" \
+        --nsg-name "$nsg_name" \
+        --query "[?direction=='Outbound'].{priority:priority, name:name, access:access, dest:destinationAddressPrefix}" \
+        --output table
+
+    log_success "Network locked down to minimum airgap rules"
+
+    # --- Negative test: prove external registries are blocked ---
+    log "Running negative airgap test (docker.io pull must fail)..."
+
+    # Create a pod that tries to pull from Docker Hub
+    kubectl --context="$CLUSTER_CONTEXT" run airgap-negative-test \
+        --image=docker.io/library/nginx:latest \
+        --namespace=quix \
+        --restart=Never \
+        --overrides='{"spec":{"terminationGracePeriodSeconds":0}}' \
+        2>/dev/null || true
+
+    # Wait briefly for the pull attempt to fail
+    local attempts=0
+    local max_attempts=12  # 60 seconds
+    local pull_failed=false
+
+    while [[ $attempts -lt $max_attempts ]]; do
+        local status
+        status=$(kubectl --context="$CLUSTER_CONTEXT" get pod airgap-negative-test \
+            -n quix -o jsonpath='{.status.containerStatuses[0].state.waiting.reason}' 2>/dev/null || echo "")
+
+        if [[ "$status" == "ImagePullBackOff" || "$status" == "ErrImagePull" ]]; then
+            pull_failed=true
+            break
+        fi
+
+        # Also check if it somehow succeeded (bad - means airgap is leaky)
+        local phase
+        phase=$(kubectl --context="$CLUSTER_CONTEXT" get pod airgap-negative-test \
+            -n quix -o jsonpath='{.status.phase}' 2>/dev/null || echo "")
+        if [[ "$phase" == "Running" ]]; then
+            break
+        fi
+
+        sleep 5
+        attempts=$((attempts + 1))
+    done
+
+    # Clean up the test pod
+    kubectl --context="$CLUSTER_CONTEXT" delete pod airgap-negative-test \
+        -n quix --grace-period=0 --force 2>/dev/null || true
+
+    if [[ "$pull_failed" == "true" ]]; then
+        log_success "Negative test PASSED: docker.io pull correctly blocked by NSG"
+    else
+        log_error "Negative test FAILED: docker.io/library/nginx was NOT blocked - airgap is leaky!"
+        return 1
+    fi
+}
+
+################################################################################
 # Verification
 ################################################################################
 
@@ -775,6 +893,7 @@ main() {
     create_namespace
     generate_byoc_values
     install_byoc
+    lockdown_network
     verify_deployment
 
     log_section "Pipeline Complete"
