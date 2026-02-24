@@ -46,6 +46,7 @@ LOCATION="${LOCATION:-westeurope}"
 KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.33.6}"
 INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-3600}" # 60 minutes
 INSTALLER_TAG="${INSTALLER_TAG:-1.6.7-0.1.20260217631-airgap}"
+BYOCVERSIONS_DIR="${BYOCVERSIONS_DIR:-}"
 
 # Tracking
 TERRAFORM_APPLIED=false
@@ -195,14 +196,11 @@ validate_prerequisites() {
 # Registry Pre-check (fail fast before provisioning infrastructure)
 ################################################################################
 
-# Container images that must exist in the registry.
+# Infrastructure images (repo existence only - versions come from BYOC roles).
+# Platform images (workspace-service, portal-api, etc.) are checked with exact
+# tags via PLATFORM_IMAGE_VERSIONS above.
 REQUIRED_IMAGES=(
     "quixplatform-ansible-builder"
-    "workspace-service"
-    "deployments-service"
-    "portal-api"
-    "portalui"
-    "admin-ui"
     "jetstack/cert-manager-controller"
     "jetstack/cert-manager-webhook"
     "jetstack/cert-manager-cainjector"
@@ -231,6 +229,32 @@ CHART_VERSION_SOURCES=(
     "helm/bitnami/minio|roles/logging/tasks/versions.yaml|minio_version"
     "helm/gitea/gitea|roles/gitea/tasks/versions.yaml|gitea_chart_version"
     "helm/annotation-transmuter-webhook|roles/annotation_transmuter_webhook/tasks/versions.yaml|annotation_transmuter_webhook_version"
+)
+
+# Platform image -> version mappings. Each entry:
+#   component_key_in_container_versions|image_name_in_registry
+# Tags are extracted from container_versions.yaml (sourced from BYOCVersions).
+# The image names come from the "service" field in platform_values.yaml.j2.
+PLATFORM_IMAGE_VERSIONS=(
+    "users|authapi"
+    "users|userservice"
+    "build|buildservice"
+    "deployments|deployments-ide-api"
+    "deployments|deployments-logs-api"
+    "deployments|deployments-service"
+    "deployments|deployments-metrics-signalr"
+    "deployments|deployments-monitoring-service"
+    "git|git-api"
+    "git|git-tester-api"
+    "notifications|notifications-api"
+    "portal_frontend|portalui"
+    "portal_backend|portal-api"
+    "portal_backend|portal-api-notifications"
+    "portal_backend|portal-library-api"
+    "admin_ui|admin-ui"
+    "datalake_api|datalake-tester-api"
+    "workspace|workspace-service"
+    "telemetry_client|telemetry-client"
 )
 
 # Charts where we only check repo existence (version comes from dynamic config
@@ -345,6 +369,42 @@ precheck_registry() {
         check_chart_version "$chart_repo" "$version" || true
     done
 
+    # --- Platform image version checks (from container_versions.yaml) ---
+    # This catches the most common failure: BYOCVersions updated with new
+    # image tags that haven't been mirrored to quixregistry yet.
+    local cv_file=""
+    if [[ -n "$BYOCVERSIONS_DIR" && -f "$BYOCVERSIONS_DIR/container_versions.yaml" ]]; then
+        cv_file="$BYOCVERSIONS_DIR/container_versions.yaml"
+    elif [[ -f "$BYOC_PATH/assets/versions/container_versions.yaml" ]]; then
+        cv_file="$BYOC_PATH/assets/versions/container_versions.yaml"
+    fi
+
+    if [[ -n "$cv_file" ]]; then
+        echo ""
+        log "Checking platform image versions (from container_versions.yaml)..."
+        local prev_component="" prev_tag=""
+
+        for entry in "${PLATFORM_IMAGE_VERSIONS[@]}"; do
+            IFS='|' read -r component image_name <<< "$entry"
+
+            # Cache tag extraction per component (many images share one tag)
+            if [[ "$component" != "$prev_component" ]]; then
+                prev_component="$component"
+                prev_tag=$(yq ".platform_container_versions.${component}.imagetag" "$cv_file" 2>/dev/null || echo "")
+            fi
+
+            if [[ -z "$prev_tag" || "$prev_tag" == "null" ]]; then
+                log "  ${YELLOW}[SKIP]${NC} $image_name (no tag for component '$component')"
+                continue
+            fi
+
+            check_chart_version "$image_name" "$prev_tag" || true
+        done
+    else
+        log_warn "container_versions.yaml not found - skipping platform image version checks"
+        log_warn "Set BYOCVERSIONS_DIR to enable this check"
+    fi
+
     # --- Repo existence checks (platform charts) ---
     echo ""
     log "Checking platform charts (repo existence)..."
@@ -352,9 +412,9 @@ precheck_registry() {
         check_repo_exists "$chart" || true
     done
 
-    # --- Container images ---
+    # --- Container images (infrastructure - repo existence only) ---
     echo ""
-    log "Checking container images..."
+    log "Checking infrastructure images..."
     for image in "${REQUIRED_IMAGES[@]}"; do
         check_repo_exists "$image" || true
     done
