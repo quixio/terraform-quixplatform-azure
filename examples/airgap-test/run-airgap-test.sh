@@ -45,7 +45,7 @@ BYOC_PATH="${BYOC_PATH:-}"
 LOCATION="${LOCATION:-westeurope}"
 KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.33.6}"
 INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-3600}" # 60 minutes
-INSTALLER_TAG="${INSTALLER_TAG:-1.6.7-0.1.20260217631-airgap}"
+INSTALLER_TAG="${INSTALLER_TAG:-1.6.7-0.1.20260116617-airgap}"
 BYOCVERSIONS_DIR="${BYOCVERSIONS_DIR:-}"
 
 # Tracking
@@ -811,14 +811,18 @@ lockdown_network() {
             --output none 2>/dev/null || log_warn "  Rule $rule not found (already removed?)"
     done
 
+    # Brief pause for ARM to process the deletions before creating new rules
+    sleep 5
+
     # Add regional AzureCloud rule to replace the global one.
     # AKS control plane needs HTTPS to the regional Azure management plane.
+    # Uses priority 201 to avoid ARM race with the just-deleted priority 200.
     log "  Adding: AllowAzureCloud-Regional (${LOCATION} only)"
-    az network nsg rule create \
+    if ! az network nsg rule create \
         --resource-group "$rg_name" \
         --nsg-name "$nsg_name" \
         --name "AllowAzureCloud-Regional" \
-        --priority 200 \
+        --priority 201 \
         --direction Outbound \
         --access Allow \
         --protocol Tcp \
@@ -826,7 +830,10 @@ lockdown_network() {
         --source-port-ranges '*' \
         --destination-address-prefixes "AzureCloud.${LOCATION}" \
         --destination-port-ranges 443 \
-        --output none
+        --output none 2>&1; then
+        log_error "Failed to create regional AzureCloud rule"
+        return 1
+    fi
 
     # Log the final rule set
     log "Final NSG rules:"
