@@ -689,13 +689,13 @@ wait_for_installer_job() {
             -o jsonpath='{.status.conditions[?(@.type=="Failed")].status}' 2>/dev/null || echo "")
 
         if [[ "$status" == "True" ]]; then
-            kill "$logs_pid" 2>/dev/null; wait "$logs_pid" 2>/dev/null || true
+            kill "$logs_pid" 2>/dev/null || true; wait "$logs_pid" 2>/dev/null || true
             log_success "Installer job completed successfully"
             return 0
         fi
 
         if [[ "$failed" == "True" ]]; then
-            kill "$logs_pid" 2>/dev/null; wait "$logs_pid" 2>/dev/null || true
+            kill "$logs_pid" 2>/dev/null || true; wait "$logs_pid" 2>/dev/null || true
             log_error "Installer job failed"
             kubectl --context="$CLUSTER_CONTEXT" logs "job/$job_name" -n "$namespace" --tail=50 2>/dev/null || true
             return 1
@@ -705,7 +705,7 @@ wait_for_installer_job() {
         elapsed=$((elapsed + 15))
     done
 
-    kill "$logs_pid" 2>/dev/null; wait "$logs_pid" 2>/dev/null || true
+    kill "$logs_pid" 2>/dev/null || true; wait "$logs_pid" 2>/dev/null || true
     log_error "Installer job did not complete within timeout"
     return 1
 }
