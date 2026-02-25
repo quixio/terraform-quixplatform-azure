@@ -52,3 +52,6 @@ venv/
 # kubeconfig (if generated locally here)
 .kube/
 
+# AI agent workspace
+.claude/
+

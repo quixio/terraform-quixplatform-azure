@@ -13,3 +13,6 @@ terraform.tfvars
 
 # Backend override (generated for local runs)
 backend_override.tf
+
+# AI agent workspace
+.claude/
