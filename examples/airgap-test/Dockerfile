@@ -10,10 +10,10 @@
 # not on this machine.
 #
 # Build:
-#   docker build --platform linux/amd64 -t quixregistry.azurecr.io/airgap-test-runner:latest .
+#   docker build --platform linux/amd64 -t $ACR_REGISTRY/airgap-test-runner:latest .
 #
-# Push (after az acr login -n quixregistry):
-#   docker push quixregistry.azurecr.io/airgap-test-runner:latest
+# Push (after az acr login -n $ACR_NAME):
+#   docker push $ACR_REGISTRY/airgap-test-runner:latest
 #
 # Run (interactive):
 #   docker run -it --rm \
@@ -22,12 +22,12 @@
 #     -v $(pwd):/workspace \
 #     -w /workspace \
 #     -e QUIX_ACR_USERNAME -e QUIX_ACR_PASSWORD \
-#     -e QUIX_ZIP_CLIENT_ID -e QUIX_ZIP_CLIENT_SECRET -e QUIX_ZIP_TENANT_ID \
+#     -e ACR_REGISTRY -e ACR_ID \
 #     -e QUIX_LICENSE_KEY \
-#     quixregistry.azurecr.io/airgap-test-runner:latest ./run-airgap-test.sh
+#     $ACR_REGISTRY/airgap-test-runner:latest ./run-airgap-test.sh
 #
 # For Azure DevOps:
-#   container: quixregistry.azurecr.io/airgap-test-runner:latest
+#   container: $ACR_REGISTRY/airgap-test-runner:latest
 #   Mount credentials via pipeline variables
 
 FROM mcr.microsoft.com/azure-cli:cbl-mariner2.0

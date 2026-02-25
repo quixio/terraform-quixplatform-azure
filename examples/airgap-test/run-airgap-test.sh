@@ -15,9 +15,11 @@
 #   --help               Show this help
 #
 # Required Environment Variables:
-#   QUIX_ACR_USERNAME    - Username for quixregistry.azurecr.io
-#   QUIX_ACR_PASSWORD    - Password for quixregistry.azurecr.io
+#   QUIX_ACR_USERNAME    - Username for the container registry
+#   QUIX_ACR_PASSWORD    - Password for the container registry
 #   QUIX_LICENSE_KEY     - License key for Quix platform
+#   ACR_REGISTRY         - Container registry hostname (e.g., myregistry.azurecr.io)
+#   ACR_ID               - Full Azure resource ID of the ACR (for Terraform AcrPull role assignment)
 #
 # Optional Environment Variables:
 #   INSTALLER_TAG        - Airgap installer image tag (default: 1.6.7-0.1.20260217631-airgap)
@@ -47,6 +49,8 @@ KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.33.6}"
 INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-3600}" # 60 minutes
 INSTALLER_TAG="${INSTALLER_TAG:-1.6.7-0.1.20260116617-airgap}"
 BYOCVERSIONS_DIR="${BYOCVERSIONS_DIR:-}"
+ACR_REGISTRY="${ACR_REGISTRY:-}"
+ACR_ID="${ACR_ID:-}"
 
 # Tracking
 TERRAFORM_APPLIED=false
@@ -154,6 +158,8 @@ validate_prerequisites() {
         "QUIX_ACR_USERNAME"
         "QUIX_ACR_PASSWORD"
         "QUIX_LICENSE_KEY"
+        "ACR_REGISTRY"
+        "ACR_ID"
     )
 
     for var in "${required_vars[@]}"; do
@@ -294,7 +300,7 @@ extract_byoc_version() {
 precheck_registry() {
     log_section "Pre-check: Validating Registry"
 
-    local acr_registry="quixregistry.azurecr.io"
+    local acr_registry="$ACR_REGISTRY"
     local passed=0
     local failed=0
     local missing_items=()
@@ -371,7 +377,7 @@ precheck_registry() {
 
     # --- Platform image version checks (from container_versions.yaml) ---
     # This catches the most common failure: BYOCVersions updated with new
-    # image tags that haven't been mirrored to quixregistry yet.
+    # image tags that haven't been mirrored to the release registry yet.
     local cv_file=""
     if [[ -n "$BYOCVERSIONS_DIR" && -f "$BYOCVERSIONS_DIR/container_versions.yaml" ]]; then
         cv_file="$BYOCVERSIONS_DIR/container_versions.yaml"
@@ -447,7 +453,7 @@ cleanup() {
     if [[ "$SKIP_DESTROY" == "true" ]]; then
         log_warn "Skipping destroy (--skip-destroy flag set)"
         log "Resources remain in resource group: rg-quix-airgap-${RUN_ID}"
-        log "To destroy manually: cd $SCRIPT_DIR && terraform destroy -var run_id=$RUN_ID -auto-approve"
+        log "To destroy manually: cd $SCRIPT_DIR && terraform destroy -var run_id=$RUN_ID -var acr_id=\$ACR_ID -auto-approve"
         return
     fi
 
@@ -465,6 +471,7 @@ cleanup() {
                 -var "run_id=${RUN_ID}" \
                 -var "location=${LOCATION}" \
                 -var "kubernetes_version=${KUBERNETES_VERSION}" \
+                -var "acr_id=${ACR_ID}" \
                 -auto-approve 2>&1; then
                 log_success "Infrastructure destroyed"
                 break
@@ -516,9 +523,10 @@ generate_byoc_values() {
         -e "s|privateDockerRegistryUsername: CHANGEME|privateDockerRegistryUsername: ${QUIX_ACR_USERNAME}|g" \
         -e "s|privateDockerRegistryPassword: CHANGEME|privateDockerRegistryPassword: ${QUIX_ACR_PASSWORD}|g" \
         -e "s|licenseKey: CHANGEME|licenseKey: ${QUIX_LICENSE_KEY}|g" \
+        -e "s|ACR_REGISTRY|${ACR_REGISTRY}|g" \
         "$template_file" > "$values_file"
 
-    log "Installer image: quixregistry.azurecr.io/quixplatform-ansible-builder:${INSTALLER_TAG}"
+    log "Installer image: ${ACR_REGISTRY}/quixplatform-ansible-builder:${INSTALLER_TAG}"
 
     log_success "Generated: $values_file"
 }
@@ -561,6 +569,7 @@ terraform_apply() {
         -var "run_id=${RUN_ID}" \
         -var "location=${LOCATION}" \
         -var "kubernetes_version=${KUBERNETES_VERSION}" \
+        -var "acr_id=${ACR_ID}" \
         -auto-approve
 
     TERRAFORM_APPLIED=true
@@ -675,8 +684,8 @@ install_byoc() {
     # Pre-authenticate helm to the ACR. dev.sh tries az acr login which
     # doesn't work with service principals (no docker daemon). Use helm
     # registry login with the credentials from the variable group instead.
-    log "Authenticating helm to quixregistry.azurecr.io..."
-    echo "$QUIX_ACR_PASSWORD" | helm registry login quixregistry.azurecr.io \
+    log "Authenticating helm to ${ACR_REGISTRY}..."
+    echo "$QUIX_ACR_PASSWORD" | helm registry login "$ACR_REGISTRY" \
         --username "$QUIX_ACR_USERNAME" --password-stdin
     log_success "Helm authenticated to ACR"
 
@@ -684,8 +693,8 @@ install_byoc() {
     log "This typically takes 10-15 minutes..."
 
     # Override chart registry: dev.sh defaults to quixcontainerregistry but
-    # airgap charts are mirrored to quixregistry
-    export QUIX_CHART_REGISTRY="quixregistry.azurecr.io"
+    # airgap charts are mirrored to the release registry
+    export QUIX_CHART_REGISTRY="$ACR_REGISTRY"
 
     # Run install. dev.sh backgrounds helm and streams pod logs, but the log
     # stream can disconnect in long-running installs (e.g. monitoring takes 12+
@@ -776,7 +785,7 @@ wait_for_installer_job() {
 # During bootstrap and install, the NSG allows broad Azure service access
 # (MCR, AzureCloud global, etc.). After install completes, tighten the
 # rules to only what the running platform actually needs:
-#   - ACR francecentral (quixregistry.azurecr.io)
+#   - ACR francecentral (release registry)
 #   - Storage francecentral (ACR blob backend)
 #   - AKS control plane (regional)
 #   - DNS, NTP, AAD, VNet internal
@@ -798,7 +807,7 @@ lockdown_network() {
         "AllowAzureCloud"          # Global Azure Cloud - replace with regional
         "AllowMCR"                 # MCR service tag - system images already cached
         "AllowMCR-CDN"             # 20.0.0.0/8 + Akamai - the biggest hole
-        "AllowACR-WestEurope"      # quixregistry is in francecentral, not here
+        "AllowACR-WestEurope"      # Release ACR is in francecentral, not here
         "AllowStorage-WestEurope"  # Only needed during bootstrap
     )
 

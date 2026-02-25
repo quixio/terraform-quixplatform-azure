@@ -19,7 +19,7 @@ BYOC_PATH="${BYOC_PATH:-$SCRIPT_DIR/../../../Infrastructure.BYOC}"
 BYOCVERSIONS_PATH="${BYOCVERSIONS_PATH:-$SCRIPT_DIR/../../../Infrastructure.BYOCVersions}"
 
 # Check required env vars
-REQUIRED_VARS="QUIX_ACR_USERNAME QUIX_ACR_PASSWORD QUIX_ZIP_CLIENT_ID QUIX_ZIP_CLIENT_SECRET QUIX_ZIP_TENANT_ID QUIX_LICENSE_KEY"
+REQUIRED_VARS="QUIX_ACR_USERNAME QUIX_ACR_PASSWORD QUIX_LICENSE_KEY ACR_REGISTRY ACR_ID"
 MISSING=""
 for var in $REQUIRED_VARS; do
     if [[ -z "${!var:-}" ]]; then
@@ -70,12 +70,11 @@ docker run -it --rm \
     -w /workspace \
     -e QUIX_ACR_USERNAME \
     -e QUIX_ACR_PASSWORD \
-    -e QUIX_ZIP_CLIENT_ID \
-    -e QUIX_ZIP_CLIENT_SECRET \
-    -e QUIX_ZIP_TENANT_ID \
     -e QUIX_LICENSE_KEY \
+    -e ACR_REGISTRY \
+    -e ACR_ID \
     -e BYOC_PATH=/byoc \
     -e BYOCVERSIONS_DIR=/byocversions \
     -e AZURE_CLI_DISABLE_AZURELINUX2_WARNING=1 \
-    quixregistry.azurecr.io/airgap-test-runner:latest \
+    "${ACR_REGISTRY}/airgap-test-runner:latest" \
     ./run-airgap-test.sh "$@"

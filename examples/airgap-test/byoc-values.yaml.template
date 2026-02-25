@@ -9,7 +9,7 @@
 # - minio storage class: managed-csi (Azure Disk, not Azure Files)
 #
 # The airgap cluster uses NSG rules to block external traffic.
-# All images must come from quixregistry.azurecr.io
+# All images must come from ACR_REGISTRY
 
 global:
   byocZipVersion: ""
@@ -32,18 +32,18 @@ global:
     secretName: zip-secret
     tenantId: ""
   privateDockerRegistryPassword: CHANGEME
-  privateDockerRegistryUrl: quixregistry.azurecr.io
+  privateDockerRegistryUrl: ACR_REGISTRY
   privateDockerRegistryUsername: CHANGEME
   rootDomain: airgap-test.internal
   tier: BringYourOwnCluster
   # Helm chart OCI path prefix within the registry.
-  # Charts live at quixregistry.azurecr.io/helm/<chart-name>
+  # Charts live at ACR_REGISTRY/helm/<chart-name>
   # Ansible installer defaults empty string to "helm" via Jinja2 default(value, true),
   # but workspace-service reads this literally via platform_values.yaml.j2 default(value)
   # which does NOT treat empty string as falsy. So we must set this explicitly.
   helmNamespace: "helm"
 image:
-  containerRegistry: quixregistry.azurecr.io
+  containerRegistry: ACR_REGISTRY
   pullPolicy: IfNotPresent
   service: quixplatform-ansible-builder
   # Substituted by run-airgap-test.sh from INSTALLER_TAG env var

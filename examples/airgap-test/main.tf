@@ -6,7 +6,7 @@
 #
 # This configuration creates:
 # - AKS cluster with spot instances for cost savings
-# - NSG rules for egress filtering (only allow quixregistry.azurecr.io + essentials)
+# - NSG rules for egress filtering (only allow ACR + essential Azure services)
 # - All resources tagged for easy cleanup
 #
 # IMPORTANT: This is for ephemeral test clusters only. Resources are designed
@@ -15,7 +15,7 @@
 # Network approach: NSG-based filtering (cheaper than Azure Firewall)
 # - Allow specific Azure service tags for ACR, Storage, AKS management
 # - Deny all other internet traffic
-# - quixregistry.azurecr.io is in francecentral, so we allow that region
+# - ACR region (e.g., francecentral) is allowed separately from the cluster region
 ################################################################################
 
 terraform {
@@ -109,7 +109,7 @@ resource "azurerm_subnet" "nodes" {
 # ready, the NSG is applied to enforce airgap restrictions.
 #
 # Key insight from testing:
-# - quixregistry.azurecr.io is in francecentral
+# - The ACR may be in a different region than the cluster (e.g., francecentral)
 # - MCR (mcr.microsoft.com) uses CDN IPs outside Azure ranges
 # - Need to allow HTTPS (443) to Internet before DenyInternet rule
 ################################################################################
@@ -179,7 +179,7 @@ resource "azurerm_network_security_group" "aks" {
     destination_address_prefix = "AzureContainerRegistry.${var.location}"
   }
 
-  # ACR - francecentral (where quixregistry.azurecr.io is located)
+  # ACR - francecentral (where the release registry is located)
   security_rule {
     name                       = "AllowACR-FranceCentral"
     priority                   = 211
@@ -205,7 +205,7 @@ resource "azurerm_network_security_group" "aks" {
     destination_address_prefix = "Storage.${var.location}"
   }
 
-  # Storage - francecentral (for quixregistry blob storage)
+  # Storage - francecentral (backing blob storage for ACR in that region)
   security_rule {
     name                       = "AllowStorage-FranceCentral"
     priority                   = 221

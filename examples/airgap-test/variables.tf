@@ -50,5 +50,4 @@ variable "workload_node_count" {
 variable "acr_id" {
   description = "Resource ID of the Azure Container Registry to attach (grants AcrPull to kubelet identity)"
   type        = string
-  default     = "/subscriptions/9f038d11-a56f-4156-a0ce-6041f2a4b8ab/resourceGroups/Quix/providers/Microsoft.ContainerRegistry/registries/quixregistry"
 }
