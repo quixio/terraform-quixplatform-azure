@@ -225,6 +225,8 @@ check_infrastructure() {
         # Verify mongo is actually responding
         local mongo_ready
         mongo_ready=$(kubectl exec -n "${NAMESPACE_PREFIX}-mongo" mongo-mongodb-0 -- mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -c "ok" || echo "0")
+        mongo_ready=$(echo "$mongo_ready" | tr -d '[:space:]')
+        mongo_ready=${mongo_ready:-0}
         if [[ "$mongo_ready" -gt 0 ]]; then
             log_check "mongodb responsive" "PASS"
         else

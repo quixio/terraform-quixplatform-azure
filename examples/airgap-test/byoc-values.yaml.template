@@ -49,9 +49,10 @@ image:
   # Substituted by run-airgap-test.sh from INSTALLER_TAG env var
   tag: INSTALLER_TAG
   env:
-    # Increase per-role timeout from default 600s (10m) to 1200s (20m).
-    # kube-prometheus-stack needs >10 minutes on spot instances.
-    ANSIBLE_TIMEOUT: "1200"
+    # Increase per-role timeout from default 600s (10m) to 2400s (40m).
+    # kube-prometheus-stack needs >20 minutes on spot instances (helm install
+    # alone is 15m, plus setup/diff/post-install tasks eat into budget).
+    ANSIBLE_TIMEOUT: "2400"
 imagePullSecret:
   enabled: true
   name: registrypullsecret
