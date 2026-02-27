@@ -404,7 +404,7 @@ resource "azurerm_kubernetes_cluster" "this" {
 }
 
 ################################################################################
-# Spot Instance Node Pool (for workloads - cost savings)
+# Workload Node Pool (on-demand, using reserved instances)
 ################################################################################
 
 resource "azurerm_kubernetes_cluster_node_pool" "workload" {
@@ -416,20 +416,6 @@ resource "azurerm_kubernetes_cluster_node_pool" "workload" {
   mode                  = "User"
   max_pods              = 250
   orchestrator_version  = var.kubernetes_version
-
-  # Spot instances for cost savings (~60-80% cheaper)
-  # NOTE: No taints applied - pods schedule freely without needing tolerations
-  # The spot label is still applied for visibility but doesn't block scheduling
-  priority        = "Spot"
-  eviction_policy = "Delete"
-  spot_max_price  = -1 # Pay up to on-demand price
-
-  node_labels = {
-    "kubernetes.azure.com/scalesetpriority" = "spot"
-  }
-
-  # Intentionally NOT setting node_taints - this allows all pods to schedule
-  # without requiring tolerations in every helm chart and operator
 
   tags = local.common_tags
 }
