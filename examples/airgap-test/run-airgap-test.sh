@@ -468,6 +468,7 @@ cleanup() {
 
         while [[ $retry -lt $max_retries ]]; do
             if terraform destroy \
+                -input=false \
                 -var "run_id=${RUN_ID}" \
                 -var "location=${LOCATION}" \
                 -var "kubernetes_version=${KUBERNETES_VERSION}" \
@@ -566,6 +567,7 @@ terraform_apply() {
     log "This typically takes 5-10 minutes..."
 
     terraform apply \
+        -input=false \
         -var "run_id=${RUN_ID}" \
         -var "location=${LOCATION}" \
         -var "kubernetes_version=${KUBERNETES_VERSION}" \
@@ -696,6 +698,19 @@ install_byoc() {
     # airgap charts are mirrored to the release registry
     export QUIX_CHART_REGISTRY="$ACR_REGISTRY"
 
+    # Compute effective timeout: the lesser of INSTALL_TIMEOUT and remaining
+    # budget before job deadline (minus 5 min buffer for post-install steps).
+    local remaining_budget=$(( JOB_DEADLINE_EPOCH - $(date +%s) - 300 ))
+    local effective_timeout=$INSTALL_TIMEOUT
+    if [[ $remaining_budget -lt $effective_timeout ]]; then
+        effective_timeout=$remaining_budget
+    fi
+    if [[ $effective_timeout -le 0 ]]; then
+        log_error "No time budget remaining for install (deadline exceeded)"
+        return 1
+    fi
+    log "Install timeout: ${effective_timeout}s (budget: ${remaining_budget}s, configured: ${INSTALL_TIMEOUT}s)"
+
     # Run install. dev.sh backgrounds helm and streams pod logs, but the log
     # stream can disconnect in long-running installs (e.g. monitoring takes 12+
     # minutes). If dev.sh exits non-zero, fall back to polling the installer
@@ -706,7 +721,7 @@ install_byoc() {
     # registry using registrypullsecret - same path as a real customer.
     # --no-sync-versions: the fat installer has all BYOCVersions baked in,
     # don't try to sync from an external BYOCVersions directory.
-    timeout "$INSTALL_TIMEOUT" ./dev.sh install \
+    timeout "$effective_timeout" ./dev.sh install \
         -f "$values_file" \
         --context "$CLUSTER_CONTEXT" \
         --no-local-files \
@@ -728,7 +743,8 @@ install_byoc() {
 wait_for_installer_job() {
     local job_name="quixplatform-manager-job"
     local namespace="quix"
-    local elapsed=0
+    # Use deadline with 5 min buffer for post-install steps
+    local deadline=$(( JOB_DEADLINE_EPOCH - 300 ))
 
     # Check if the job even exists
     if ! kubectl --context="$CLUSTER_CONTEXT" get job "$job_name" -n "$namespace" &>/dev/null; then
@@ -751,8 +767,8 @@ wait_for_installer_job() {
         local logs_pid=$!
     fi
 
-    # Poll for job completion while logs stream
-    while [[ $elapsed -lt $INSTALL_TIMEOUT ]]; do
+    # Poll for job completion while logs stream (deadline-based)
+    while [[ $(date +%s) -lt $deadline ]]; do
         local status
         status=$(kubectl --context="$CLUSTER_CONTEXT" get job "$job_name" -n "$namespace" \
             -o jsonpath='{.status.conditions[?(@.type=="Complete")].status}' 2>/dev/null || echo "")
@@ -774,11 +790,10 @@ wait_for_installer_job() {
         fi
 
         sleep 15
-        elapsed=$((elapsed + 15))
     done
 
     kill "$logs_pid" 2>/dev/null || true; wait "$logs_pid" 2>/dev/null || true
-    log_error "Installer job did not complete within timeout"
+    log_error "Installer job did not complete before deadline ($(date -d @$JOB_DEADLINE_EPOCH 2>/dev/null || date -r $JOB_DEADLINE_EPOCH))"
     return 1
 }
 
@@ -958,10 +973,15 @@ main() {
         RUN_ID="$(date +%m%d%H%M)"
     fi
 
+    # Reserve 10 minutes for post-install steps (lockdown, verify, cleanup).
+    # The job timeout is 90 min; we cap install at 80 min from start.
+    JOB_DEADLINE_EPOCH=$(( $(date +%s) + 80 * 60 ))
+
     log_section "Airgap Test Pipeline"
     log "Run ID: $RUN_ID"
     log "Installer Tag: $INSTALLER_TAG"
     log "Start Time: $(date)"
+    log "Job Deadline: $(date -d @$JOB_DEADLINE_EPOCH 2>/dev/null || date -r $JOB_DEADLINE_EPOCH)"
 
     # Set up cleanup trap
     trap cleanup EXIT
