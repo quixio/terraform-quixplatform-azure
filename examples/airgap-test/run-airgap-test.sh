@@ -704,10 +704,13 @@ install_byoc() {
     # --no-local-files: skip the dev convenience of pre-downloading charts
     # to a PVC. Instead, the installer pod pulls charts directly from the
     # registry using registrypullsecret - same path as a real customer.
+    # --no-sync-versions: the fat installer has all BYOCVersions baked in,
+    # don't try to sync from an external BYOCVersions directory.
     timeout "$INSTALL_TIMEOUT" ./dev.sh install \
         -f "$values_file" \
         --context "$CLUSTER_CONTEXT" \
-        --no-local-files 2>&1 || dev_exit=$?
+        --no-local-files \
+        --no-sync-versions 2>&1 || dev_exit=$?
 
     if [[ $dev_exit -eq 0 ]]; then
         log_success "BYOC installation completed"
