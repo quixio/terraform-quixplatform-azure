@@ -47,7 +47,7 @@ BYOC_PATH="${BYOC_PATH:-}"
 LOCATION="${LOCATION:-westeurope}"
 KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.33.6}"
 INSTALL_TIMEOUT="${INSTALL_TIMEOUT:-3600}" # 60 minutes
-INSTALLER_TAG="${INSTALLER_TAG:-1.6.7-0.1.20260116617-airgap}"
+INSTALLER_TAG="${INSTALLER_TAG:-1.6.7-airgap-20260227.1}"
 BYOCVERSIONS_DIR="${BYOCVERSIONS_DIR:-}"
 ACR_REGISTRY="${ACR_REGISTRY:-}"
 ACR_ID="${ACR_ID:-}"
@@ -318,9 +318,13 @@ extract_container_versions() {
     local versions_dir
     versions_dir=$(mktemp -d)
 
-    # Authenticate crane to ACR
-    echo "$QUIX_ACR_PASSWORD" | crane auth login "$ACR_REGISTRY" \
-        --username "$QUIX_ACR_USERNAME" --password-stdin
+    # Authenticate crane to ACR (non-fatal - extraction is best-effort)
+    if ! echo "$QUIX_ACR_PASSWORD" | crane auth login "$ACR_REGISTRY" \
+        --username "$QUIX_ACR_USERNAME" --password-stdin 2>/dev/null; then
+        log_warn "Could not authenticate crane to registry"
+        log_warn "Platform image version checks will be skipped"
+        return 0
+    fi
 
     # Extract just container_versions.yaml from the image filesystem.
     # crane export streams the full image as a tar; --include filters to
@@ -420,8 +424,9 @@ precheck_registry() {
     done
 
     # --- Platform image version checks (from container_versions.yaml) ---
-    # This catches the most common failure: BYOCVersions updated with new
-    # image tags that haven't been mirrored to the release registry yet.
+    # These are non-fatal: the fat installer has versions baked in that may
+    # differ from what container_versions.yaml reports. Missing platform
+    # images are logged as warnings, not errors.
     local cv_file=""
     if [[ -n "$BYOCVERSIONS_DIR" && -f "$BYOCVERSIONS_DIR/container_versions.yaml" ]]; then
         cv_file="$BYOCVERSIONS_DIR/container_versions.yaml"
@@ -433,6 +438,7 @@ precheck_registry() {
         echo ""
         log "Checking platform image versions (from container_versions.yaml)..."
         local prev_component="" prev_tag=""
+        local platform_warnings=()
 
         for entry in "${PLATFORM_IMAGE_VERSIONS[@]}"; do
             IFS='|' read -r component image_name <<< "$entry"
@@ -448,11 +454,32 @@ precheck_registry() {
                 continue
             fi
 
-            check_chart_version "$image_name" "$prev_tag" || true
+            # Check version but track separately (non-fatal)
+            local tags
+            tags=$(az acr repository show-tags --name "$acr_name" --repository "$image_name" --output tsv 2>/dev/null)
+            if echo "$tags" | grep -qx "$prev_tag"; then
+                log "  ${GREEN}[OK]${NC} $image_name:$prev_tag"
+                passed=$((passed + 1))
+            elif [[ -z "$tags" ]]; then
+                log "  ${YELLOW}[WARN]${NC} $image_name (repo not found)"
+                platform_warnings+=("$image_name (repo missing)")
+            else
+                local latest
+                latest=$(echo "$tags" | sort -V | tail -1)
+                log "  ${YELLOW}[WARN]${NC} $image_name:$prev_tag (latest: $latest)"
+                platform_warnings+=("$image_name:$prev_tag (latest in registry: $latest)")
+            fi
         done
+
+        if [[ ${#platform_warnings[@]} -gt 0 ]]; then
+            log_warn "Platform image version mismatches (non-fatal):"
+            for item in "${platform_warnings[@]}"; do
+                echo "  - $item"
+            done
+            log_warn "The fat installer may use different versions - install can still succeed."
+        fi
     else
         log_warn "container_versions.yaml not found - skipping platform image version checks"
-        log_warn "Set BYOCVERSIONS_DIR to enable this check"
     fi
 
     # --- Repo existence checks (platform charts) ---
@@ -946,7 +973,8 @@ lockdown_network() {
     # dependency as a known requirement.
     local auth0_host="quix-byoc.eu.auth0.com"
     local auth0_ips
-    auth0_ips=$(dig +short "$auth0_host" | grep -E '^[0-9]' | sort -u | tr '\n' ' ')
+    # Use getent (glibc, always available) instead of dig (bind-utils, not in container)
+    auth0_ips=$(getent ahosts "$auth0_host" 2>/dev/null | awk '{print $1}' | grep -E '^[0-9]+\.' | sort -u | tr '\n' ' ' || true)
 
     if [[ -n "$auth0_ips" ]]; then
         log "  Adding: AllowAuth0 (${auth0_host} -> ${auth0_ips})"
