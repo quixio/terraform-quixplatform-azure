@@ -318,28 +318,18 @@ extract_container_versions() {
     local versions_dir
     versions_dir=$(mktemp -d)
 
-    # Install crane if not already available
-    if ! command -v crane &>/dev/null; then
-        log "Installing crane..."
-        local crane_url="https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz"
-        if [[ "$(uname -s)" == "Darwin" ]]; then
-            crane_url="https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Darwin_x86_64.tar.gz"
-        fi
-        curl -sL "$crane_url" | tar xz -C /tmp crane
-        export PATH="/tmp:$PATH"
-    fi
-
     # Authenticate crane to ACR
     echo "$QUIX_ACR_PASSWORD" | crane auth login "$ACR_REGISTRY" \
         --username "$QUIX_ACR_USERNAME" --password-stdin
 
-    # Extract just container_versions.yaml from the image filesystem
+    # Extract just container_versions.yaml from the image filesystem.
+    # crane export streams the full image as a tar; --include filters to
+    # the single file we need so we don't write the whole image to disk.
     if crane export "$image" - \
         | tar xf - -C "$versions_dir" --include "app/ansible/assets/versions/container_versions.yaml" 2>/dev/null; then
 
         local extracted="$versions_dir/app/ansible/assets/versions/container_versions.yaml"
         if [[ -f "$extracted" ]]; then
-            # Point BYOCVERSIONS_DIR at the extracted directory
             BYOCVERSIONS_DIR="$versions_dir/app/ansible/assets/versions"
             export BYOCVERSIONS_DIR
             log_success "Extracted container_versions.yaml from $image"
