@@ -11,6 +11,15 @@
 # The airgap cluster uses NSG rules to block external traffic.
 # All images must come from ACR_REGISTRY
 
+# Self-signed TLS certificate for the test domain, generated at runtime by
+# run-airgap-test.sh. These flow through the cert_secrets.yaml Helm hook into
+# the agent-certificates secret, which is mounted into the installer pod at
+# /app/ansible/assets/custom-certificate/. The ingress role reads those files
+# and creates the wildcard TLS secret for Traefik.
+fullchainPemBase64: GENERATE_AT_RUNTIME
+privkeyPemBase64: GENERATE_AT_RUNTIME
+customCaPemBase64: GENERATE_AT_RUNTIME
+
 global:
   byocZipVersion: ""
   cloudProvider: azure
@@ -77,7 +86,7 @@ platformVariables:
     subdomain: portal
     customDomain: airgap-test.internal
     featureFlags:
-      customCertificateAuthoritySupplied: "false"
+      customCertificateAuthoritySupplied: "true"
       allowDirectSignups: "true"
       allowSocialSignups: "false"
   ingress:

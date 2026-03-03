@@ -210,6 +210,8 @@ REQUIRED_IMAGES=(
     "jetstack/cert-manager-controller"
     "jetstack/cert-manager-webhook"
     "jetstack/cert-manager-cainjector"
+    "jetstack/trust-manager"
+    "jetstack/cert-manager-package-debian"
     "traefik/traefik"
     "bitnami/mongodb"
     "strimzi/operator"
@@ -235,6 +237,7 @@ CHART_VERSION_SOURCES=(
     "helm/bitnami/minio|roles/logging/tasks/versions.yaml|minio_version"
     "helm/gitea/gitea|roles/gitea/tasks/versions.yaml|gitea_chart_version"
     "helm/annotation-transmuter-webhook|roles/annotation_transmuter_webhook/tasks/versions.yaml|annotation_transmuter_webhook_version"
+    "helm/jetstack/trust-manager|roles/custom_certificate_authority/tasks/versions.yaml|trust_manager_chart_version"
 )
 
 # Platform image -> version mappings. Each entry:
@@ -516,6 +519,31 @@ generate_byoc_values() {
         return 1
     fi
 
+    # Generate a self-signed wildcard TLS certificate for the test domain.
+    # These are injected as base64-encoded Helm values (fullchainPemBase64,
+    # privkeyPemBase64) which flow through the cert_secrets.yaml pre-install
+    # hook -> agent-certificates secret -> mounted into installer pod ->
+    # ingress role reads files and creates the wildcard TLS secret.
+    local cert_dir
+    cert_dir=$(mktemp -d)
+    local domain="airgap-test.internal"
+
+    log "Generating self-signed TLS certificate for *.${domain}..."
+    openssl req -x509 -newkey rsa:2048 -nodes \
+        -keyout "$cert_dir/privkey.pem" \
+        -out "$cert_dir/fullchain.pem" \
+        -days 30 \
+        -subj "/CN=*.${domain}/O=Quix Airgap Test" \
+        -addext "subjectAltName=DNS:*.${domain},DNS:${domain}" 2>/dev/null
+
+    local fullchain_b64 privkey_b64 customca_b64
+    fullchain_b64=$(base64 < "$cert_dir/fullchain.pem" | tr -d '\n')
+    privkey_b64=$(base64 < "$cert_dir/privkey.pem" | tr -d '\n')
+    # Self-signed cert is its own CA - the custom_certificate_authority role
+    # needs a valid customca.crt to install trust-manager and distribute the CA.
+    customca_b64="$fullchain_b64"
+    rm -rf "$cert_dir"
+
     # Generate values by replacing placeholders.
     # The airgap installer has BYOC files baked in, so no zip credentials needed.
     sed \
@@ -525,9 +553,13 @@ generate_byoc_values() {
         -e "s|privateDockerRegistryPassword: CHANGEME|privateDockerRegistryPassword: ${QUIX_ACR_PASSWORD}|g" \
         -e "s|licenseKey: CHANGEME|licenseKey: ${QUIX_LICENSE_KEY}|g" \
         -e "s|ACR_REGISTRY|${ACR_REGISTRY}|g" \
+        -e "s|fullchainPemBase64: GENERATE_AT_RUNTIME|fullchainPemBase64: ${fullchain_b64}|g" \
+        -e "s|privkeyPemBase64: GENERATE_AT_RUNTIME|privkeyPemBase64: ${privkey_b64}|g" \
+        -e "s|customCaPemBase64: GENERATE_AT_RUNTIME|customCaPemBase64: ${customca_b64}|g" \
         "$template_file" > "$values_file"
 
     log "Installer image: ${ACR_REGISTRY}/quixplatform-ansible-builder:${INSTALLER_TAG}"
+    log_success "TLS certificate for *.${domain} injected into values"
 
     log_success "Generated: $values_file"
 }
