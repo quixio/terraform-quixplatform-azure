@@ -326,20 +326,33 @@ extract_container_versions() {
         return 0
     fi
 
-    # Extract just container_versions.yaml from the image filesystem.
-    # crane export streams the full image as a tar; --include filters to
-    # the single file we need so we don't write the whole image to disk.
-    if crane export "$image" - \
-        | tar xf - -C "$versions_dir" --include "app/ansible/assets/versions/container_versions.yaml" 2>/dev/null; then
+    # Extract just container_versions.yaml from the flattened image filesystem.
+    # crane export streams the image as a tar; we pass the exact path as a
+    # positional argument to tar (GNU tar on Mariner - no --include flag).
+    local target_path="app/ansible/assets/versions/container_versions.yaml"
+    log "  Image: $image"
+    log "  Target: $target_path"
 
-        local extracted="$versions_dir/app/ansible/assets/versions/container_versions.yaml"
+    local crane_err
+    crane_err=$(mktemp)
+    if crane export "$image" - 2>"$crane_err" \
+        | tar xf - -C "$versions_dir" "$target_path" 2>/dev/null; then
+
+        local extracted="$versions_dir/$target_path"
         if [[ -f "$extracted" ]]; then
             BYOCVERSIONS_DIR="$versions_dir/app/ansible/assets/versions"
             export BYOCVERSIONS_DIR
-            log_success "Extracted container_versions.yaml from $image"
+            log_success "Extracted container_versions.yaml"
+            rm -f "$crane_err"
             return 0
         fi
     fi
+
+    # Log why it failed
+    if [[ -s "$crane_err" ]]; then
+        log_warn "crane export error: $(head -3 "$crane_err")"
+    fi
+    rm -f "$crane_err"
 
     log_warn "Could not extract container_versions.yaml from installer image"
     log_warn "Platform image version checks will be skipped"
