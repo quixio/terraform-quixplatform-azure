@@ -10,10 +10,10 @@
 # not on this machine.
 #
 # Build:
-#   docker build --platform linux/amd64 -t $ACR_REGISTRY/airgap-test-runner:latest .
+#   docker build --platform linux/amd64 -t $ACR_REGISTRY/airgap-test-runner:$(git rev-parse --short HEAD) .
 #
 # Push (after az acr login -n $ACR_NAME):
-#   docker push $ACR_REGISTRY/airgap-test-runner:latest
+#   docker push $ACR_REGISTRY/airgap-test-runner:$(git rev-parse --short HEAD)
 #
 # Run (interactive):
 #   docker run -it --rm \
