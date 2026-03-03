@@ -302,6 +302,55 @@ extract_byoc_version() {
     echo "$version"
 }
 
+################################################################################
+# Extract container_versions.yaml from the fat installer image
+#
+# The file is gitignored in Infrastructure.BYOC (synced at runtime from
+# BYOCVersions). But the fat installer has it baked in. We thin-pull it
+# using crane so precheck_registry can verify platform image tags match
+# what's actually in the registry.
+################################################################################
+
+extract_container_versions() {
+    log "Extracting container_versions.yaml from installer image..."
+
+    local image="${ACR_REGISTRY}/quixplatform-ansible-builder:${INSTALLER_TAG}"
+    local versions_dir
+    versions_dir=$(mktemp -d)
+
+    # Install crane if not already available
+    if ! command -v crane &>/dev/null; then
+        log "Installing crane..."
+        local crane_url="https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Linux_x86_64.tar.gz"
+        if [[ "$(uname -s)" == "Darwin" ]]; then
+            crane_url="https://github.com/google/go-containerregistry/releases/latest/download/go-containerregistry_Darwin_x86_64.tar.gz"
+        fi
+        curl -sL "$crane_url" | tar xz -C /tmp crane
+        export PATH="/tmp:$PATH"
+    fi
+
+    # Authenticate crane to ACR
+    echo "$QUIX_ACR_PASSWORD" | crane auth login "$ACR_REGISTRY" \
+        --username "$QUIX_ACR_USERNAME" --password-stdin
+
+    # Extract just container_versions.yaml from the image filesystem
+    if crane export "$image" - \
+        | tar xf - -C "$versions_dir" --include "app/ansible/assets/versions/container_versions.yaml" 2>/dev/null; then
+
+        local extracted="$versions_dir/app/ansible/assets/versions/container_versions.yaml"
+        if [[ -f "$extracted" ]]; then
+            # Point BYOCVERSIONS_DIR at the extracted directory
+            BYOCVERSIONS_DIR="$versions_dir/app/ansible/assets/versions"
+            export BYOCVERSIONS_DIR
+            log_success "Extracted container_versions.yaml from $image"
+            return 0
+        fi
+    fi
+
+    log_warn "Could not extract container_versions.yaml from installer image"
+    log_warn "Platform image version checks will be skipped"
+}
+
 precheck_registry() {
     log_section "Pre-check: Validating Registry"
 
@@ -498,6 +547,7 @@ cleanup() {
 
     # Remove generated files
     rm -f "$SCRIPT_DIR/byoc-values.yaml" 2>/dev/null || true
+    [[ -n "${BYOCVERSIONS_DIR:-}" ]] && rm -rf "${BYOCVERSIONS_DIR%/app/ansible/assets/versions}" 2>/dev/null || true
 
     if [[ $exit_code -ne 0 ]]; then
         log_error "Pipeline failed with exit code: $exit_code"
@@ -1053,6 +1103,7 @@ main() {
 
     # Run pipeline stages
     validate_prerequisites
+    extract_container_versions
     precheck_registry
     terraform_init
     terraform_apply
