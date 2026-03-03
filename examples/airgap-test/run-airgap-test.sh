@@ -844,6 +844,9 @@ wait_for_installer_job() {
 #   - AKS control plane (regional)
 #   - DNS, NTP, AAD, VNet internal
 #
+# Auth0 is the one accepted external dependency - customers who choose
+# Auth0 over Keycloak are informed about this outbound requirement.
+#
 # This proves the platform operates in a genuine airgap - no hidden
 # dependencies on MCR, Docker Hub, or broad Azure IP ranges.
 ################################################################################
@@ -896,6 +899,32 @@ lockdown_network() {
         --output none 2>&1; then
         log_error "Failed to create regional AzureCloud rule"
         return 1
+    fi
+
+    # Allow outbound HTTPS to Auth0 tenant. Auth0 uses dynamic IPs behind
+    # CDN, so resolve at runtime. Customers using Auth0 accept this outbound
+    # dependency as a known requirement.
+    local auth0_host="quix-byoc.eu.auth0.com"
+    local auth0_ips
+    auth0_ips=$(dig +short "$auth0_host" | grep -E '^[0-9]' | sort -u | tr '\n' ' ')
+
+    if [[ -n "$auth0_ips" ]]; then
+        log "  Adding: AllowAuth0 (${auth0_host} -> ${auth0_ips})"
+        az network nsg rule create \
+            --resource-group "$rg_name" \
+            --nsg-name "$nsg_name" \
+            --name "AllowAuth0" \
+            --priority 202 \
+            --direction Outbound \
+            --access Allow \
+            --protocol Tcp \
+            --source-address-prefixes '*' \
+            --source-port-ranges '*' \
+            --destination-address-prefixes $auth0_ips \
+            --destination-port-ranges 443 \
+            --output none 2>&1 || log_warn "Failed to create Auth0 NSG rule"
+    else
+        log_warn "Could not resolve ${auth0_host} - Auth0 outbound rule not created"
     fi
 
     # Log the final rule set
