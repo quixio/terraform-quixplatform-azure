@@ -160,6 +160,8 @@ validate_prerequisites() {
         "QUIX_LICENSE_KEY"
         "ACR_REGISTRY"
         "ACR_ID"
+        "AUTH0_CLIENT_ID"
+        "AUTH0_CLIENT_SECRET"
     )
 
     for var in "${required_vars[@]}"; do
@@ -553,6 +555,8 @@ generate_byoc_values() {
         -e "s|privateDockerRegistryPassword: CHANGEME|privateDockerRegistryPassword: ${QUIX_ACR_PASSWORD}|g" \
         -e "s|licenseKey: CHANGEME|licenseKey: ${QUIX_LICENSE_KEY}|g" \
         -e "s|ACR_REGISTRY|${ACR_REGISTRY}|g" \
+        -e "s|clientId: CHANGEME_AUTH0_CLIENT_ID|clientId: ${AUTH0_CLIENT_ID}|g" \
+        -e "s|clientSecret: CHANGEME_AUTH0_CLIENT_SECRET|clientSecret: ${AUTH0_CLIENT_SECRET}|g" \
         -e "s|fullchainPemBase64: GENERATE_AT_RUNTIME|fullchainPemBase64: ${fullchain_b64}|g" \
         -e "s|privkeyPemBase64: GENERATE_AT_RUNTIME|privkeyPemBase64: ${privkey_b64}|g" \
         -e "s|customCaPemBase64: GENERATE_AT_RUNTIME|customCaPemBase64: ${customca_b64}|g" \

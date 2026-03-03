@@ -89,6 +89,12 @@ platformVariables:
       customCertificateAuthoritySupplied: "true"
       allowDirectSignups: "true"
       allowSocialSignups: "false"
+  security:
+    provider: "auth0"
+    auth0:
+      genericAuth0Identity: "Quix-Dev"
+      tenantName: "quix-byoc"
+      tenantRegion: "eu"
   ingress:
     serviceType: LoadBalancer
     certClusterIssuerCreate: "false"
@@ -154,6 +160,10 @@ rolesFlags:
   streamingKafkaEnableStrimziOperator: "true"
 secrets:
   secretName: platform-secrets
+  auth0:
+    clientId: CHANGEME_AUTH0_CLIENT_ID
+    clientSecret: CHANGEME_AUTH0_CLIENT_SECRET
+    cliAuth0ClientId: ""
   dockerHub:
     enabled: false
   mongodb:
