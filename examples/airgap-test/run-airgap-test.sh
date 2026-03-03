@@ -329,7 +329,7 @@ extract_container_versions() {
     # Extract just container_versions.yaml from the flattened image filesystem.
     # crane export streams the image as a tar; we pass the exact path as a
     # positional argument to tar (GNU tar on Mariner - no --include flag).
-    local target_path="app/ansible/assets/versions/container_versions.yaml"
+    local target_path="app/ansible-baked/assets/versions/container_versions.yaml"
     log "  Image: $image"
     log "  Target: $target_path"
 
@@ -340,7 +340,7 @@ extract_container_versions() {
 
         local extracted="$versions_dir/$target_path"
         if [[ -f "$extracted" ]]; then
-            BYOCVERSIONS_DIR="$versions_dir/app/ansible/assets/versions"
+            BYOCVERSIONS_DIR="$versions_dir/app/ansible-baked/assets/versions"
             export BYOCVERSIONS_DIR
             log_success "Extracted container_versions.yaml"
             rm -f "$crane_err"
@@ -577,7 +577,7 @@ cleanup() {
 
     # Remove generated files
     rm -f "$SCRIPT_DIR/byoc-values.yaml" 2>/dev/null || true
-    [[ -n "${BYOCVERSIONS_DIR:-}" ]] && rm -rf "${BYOCVERSIONS_DIR%/app/ansible/assets/versions}" 2>/dev/null || true
+    [[ -n "${BYOCVERSIONS_DIR:-}" ]] && rm -rf "${BYOCVERSIONS_DIR%/app/ansible-baked/assets/versions}" 2>/dev/null || true
 
     if [[ $exit_code -ne 0 ]]; then
         log_error "Pipeline failed with exit code: $exit_code"
