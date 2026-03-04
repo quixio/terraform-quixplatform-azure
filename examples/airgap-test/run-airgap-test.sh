@@ -981,16 +981,22 @@ lockdown_network() {
         return 1
     fi
 
-    # Allow outbound HTTPS to Auth0 tenant. Auth0 uses dynamic IPs behind
-    # CDN, so resolve at runtime. Customers using Auth0 accept this outbound
-    # dependency as a known requirement.
-    local auth0_host="quix-byoc.eu.auth0.com"
-    local auth0_ips
+    # Allow outbound HTTPS to Auth0 tenants. Auth0 uses dynamic IPs behind
+    # CDN, so resolve at runtime. Both the BYOC tenant (quix-byoc) and the
+    # platform EU tenant (quix) are required.
+    # See: Common Network Requirements doc
+    local auth0_hosts=("quix-byoc.eu.auth0.com" "quix.eu.auth0.com")
+    local auth0_ips=""
     # Use getent (glibc, always available) instead of dig (bind-utils, not in container)
-    auth0_ips=$(getent ahosts "$auth0_host" 2>/dev/null | awk '{print $1}' | grep -E '^[0-9]+\.' | sort -u | tr '\n' ' ' || true)
+    for host in "${auth0_hosts[@]}"; do
+        local ips
+        ips=$(getent ahosts "$host" 2>/dev/null | awk '{print $1}' | grep -E '^[0-9]+\.' | sort -u | tr '\n' ' ' || true)
+        auth0_ips="$auth0_ips $ips"
+    done
+    auth0_ips=$(echo "$auth0_ips" | xargs -n1 | sort -u | tr '\n' ' ')
 
     if [[ -n "$auth0_ips" ]]; then
-        log "  Adding: AllowAuth0 (${auth0_host} -> ${auth0_ips})"
+        log "  Adding: AllowAuth0 (${auth0_hosts[*]} -> ${auth0_ips})"
         az network nsg rule create \
             --resource-group "$rg_name" \
             --nsg-name "$nsg_name" \
@@ -1005,8 +1011,36 @@ lockdown_network() {
             --destination-port-ranges 443 \
             --output none 2>&1 || log_warn "Failed to create Auth0 NSG rule"
     else
-        log_warn "Could not resolve ${auth0_host} - Auth0 outbound rule not created"
+        log_warn "Could not resolve Auth0 hosts - Auth0 outbound rule not created"
     fi
+
+    # OpsGenie - required for platform operational alerts.
+    # See: Common Network Requirements doc
+    local opsgenie_host="api.opsgenie.com"
+    local opsgenie_ips
+    opsgenie_ips=$(getent ahosts "$opsgenie_host" 2>/dev/null | awk '{print $1}' | grep -E '^[0-9]+\.' | sort -u | tr '\n' ' ' || true)
+
+    if [[ -n "$opsgenie_ips" ]]; then
+        log "  Adding: AllowOpsGenie (${opsgenie_host} -> ${opsgenie_ips})"
+        az network nsg rule create \
+            --resource-group "$rg_name" \
+            --nsg-name "$nsg_name" \
+            --name "AllowOpsGenie" \
+            --priority 203 \
+            --direction Outbound \
+            --access Allow \
+            --protocol Tcp \
+            --source-address-prefixes '*' \
+            --source-port-ranges '*' \
+            --destination-address-prefixes $opsgenie_ips \
+            --destination-port-ranges 443 \
+            --output none 2>&1 || log_warn "Failed to create OpsGenie NSG rule"
+    else
+        log_warn "Could not resolve ${opsgenie_host} - OpsGenie alerting may not work after lockdown"
+    fi
+
+    # NOTE: github.com and pypi.org are "Strongly Recommended" in network requirements
+    # but intentionally blocked in this airgap test to prove the platform operates without them.
 
     # Log the final rule set
     log "Final NSG rules:"
