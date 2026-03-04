@@ -621,11 +621,14 @@ generate_byoc_values() {
     log "Generating CA-signed TLS certificate for *.${domain}..."
     openssl genrsa -out "$cert_dir/tls.key" 2048 2>/dev/null
     openssl req -new -key "$cert_dir/tls.key" -out "$cert_dir/tls.csr" \
-        -subj "/CN=*.${domain}/O=Quix Airgap Test" \
-        -addext "subjectAltName=DNS:*.${domain},DNS:${domain}" 2>/dev/null
+        -subj "/CN=*.${domain}/O=Quix Airgap Test" 2>/dev/null
+    # Use extfile for SAN (compatible with OpenSSL 1.1.1 in the runner container)
+    cat > "$cert_dir/ext.cnf" <<EXTEOF
+subjectAltName=DNS:*.${domain},DNS:${domain}
+EXTEOF
     openssl x509 -req -in "$cert_dir/tls.csr" \
         -CA "$ca_dir/ca.crt" -CAkey "$ca_dir/ca.key" -CAcreateserial \
-        -out "$cert_dir/tls.crt" -days 30 -copy_extensions copyall 2>/dev/null
+        -out "$cert_dir/tls.crt" -days 30 -extfile "$cert_dir/ext.cnf" 2>/dev/null
     cat "$cert_dir/tls.crt" "$ca_dir/ca.crt" > "$cert_dir/fullchain.pem"
 
     local fullchain_b64 privkey_b64 customca_b64
