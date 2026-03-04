@@ -601,29 +601,37 @@ generate_byoc_values() {
         return 1
     fi
 
-    # Generate a self-signed wildcard TLS certificate for the test domain.
-    # These are injected as base64-encoded Helm values (fullchainPemBase64,
+    # Generate a wildcard TLS certificate signed by the checked-in Root CA.
+    # The CA (certs/ca.key + certs/ca.crt) is fixed so developers can trust it
+    # once; the wildcard cert is fresh per run.
+    # Values are injected as base64-encoded Helm values (fullchainPemBase64,
     # privkeyPemBase64) which flow through the cert_secrets.yaml pre-install
     # hook -> agent-certificates secret -> mounted into installer pod ->
     # ingress role reads files and creates the wildcard TLS secret.
+    local ca_dir="$SCRIPT_DIR/certs"
     local cert_dir
     cert_dir=$(mktemp -d)
     local domain="airgap-test.internal"
 
-    log "Generating self-signed TLS certificate for *.${domain}..."
-    openssl req -x509 -newkey rsa:2048 -nodes \
-        -keyout "$cert_dir/privkey.pem" \
-        -out "$cert_dir/fullchain.pem" \
-        -days 30 \
+    if [[ ! -f "$ca_dir/ca.key" || ! -f "$ca_dir/ca.crt" ]]; then
+        log_error "Root CA not found in $ca_dir - run certs/generate-ca.sh first"
+        return 1
+    fi
+
+    log "Generating CA-signed TLS certificate for *.${domain}..."
+    openssl genrsa -out "$cert_dir/tls.key" 2048 2>/dev/null
+    openssl req -new -key "$cert_dir/tls.key" -out "$cert_dir/tls.csr" \
         -subj "/CN=*.${domain}/O=Quix Airgap Test" \
         -addext "subjectAltName=DNS:*.${domain},DNS:${domain}" 2>/dev/null
+    openssl x509 -req -in "$cert_dir/tls.csr" \
+        -CA "$ca_dir/ca.crt" -CAkey "$ca_dir/ca.key" -CAcreateserial \
+        -out "$cert_dir/tls.crt" -days 30 -copy_extensions copyall 2>/dev/null
+    cat "$cert_dir/tls.crt" "$ca_dir/ca.crt" > "$cert_dir/fullchain.pem"
 
     local fullchain_b64 privkey_b64 customca_b64
     fullchain_b64=$(base64 < "$cert_dir/fullchain.pem" | tr -d '\n')
-    privkey_b64=$(base64 < "$cert_dir/privkey.pem" | tr -d '\n')
-    # Self-signed cert is its own CA - the custom_certificate_authority role
-    # needs a valid customca.crt to install trust-manager and distribute the CA.
-    customca_b64="$fullchain_b64"
+    privkey_b64=$(base64 < "$cert_dir/tls.key" | tr -d '\n')
+    customca_b64=$(base64 < "$ca_dir/ca.crt" | tr -d '\n')
     rm -rf "$cert_dir"
 
     # Generate values by replacing placeholders.
@@ -643,7 +651,7 @@ generate_byoc_values() {
         "$template_file" > "$values_file"
 
     log "Installer image: ${ACR_REGISTRY}/quixplatform-ansible-builder:${INSTALLER_TAG}"
-    log_success "TLS certificate for *.${domain} injected into values"
+    log_success "CA-signed TLS certificate for *.${domain} injected into values"
 
     log_success "Generated: $values_file"
 }

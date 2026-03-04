@@ -85,10 +85,18 @@ platformVariables:
   platform:
     subdomain: portal
     customDomain: airgap-test.internal
+    # Disable samples library - it tries to clone from github.com
+    samplesLibrary:
+      enabled: false
     featureFlags:
       customCertificateAuthoritySupplied: "true"
       allowDirectSignups: "true"
       allowSocialSignups: "false"
+  # Disable external service references unreachable in airgap
+  portal:
+    bookADemoLink: ""
+  smtp:
+    host: ""
   security:
     provider: "auth0"
     auth0:
