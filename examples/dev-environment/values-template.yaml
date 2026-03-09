@@ -1,0 +1,160 @@
+# BYOC Values Template for Dev Environments (dev1-dev5)
+#
+# Standard (non-airgap) deployment using dev.sh install.
+# All images pulled from quixcontainerregistry.azurecr.io.
+#
+# Placeholders replaced at runtime by run-dev-env.sh:
+#   ENV_NAME, ACR_REGISTRY, QUIX_ACR_USERNAME, QUIX_ACR_PASSWORD,
+#   QUIX_LICENSE_KEY, AUTH0_CLIENT_ID, AUTH0_CLIENT_SECRET
+
+global:
+  cloudProvider: azure
+  customerName: ENV_NAME
+  environment: development
+  kubeContext: agent-internal
+  namespace: quix
+  namespacePrefix: quix
+  privateDockerRegistryPassword: QUIX_ACR_PASSWORD
+  privateDockerRegistryUrl: ACR_REGISTRY
+  privateDockerRegistryUsername: QUIX_ACR_USERNAME
+  rootDomain: ENV_NAME.quix.io
+  tier: BringYourOwnCluster
+  helmNamespace: "helm"
+  externalByocVersionsRepository:
+    enabled: false
+    pat: ""
+    tag: refs/tags/stable-release
+  privateByocStorageAccount:
+    clientId: ""
+    clientSecret: ""
+    enabled: false
+    secretName: zip-secret
+    tenantId: ""
+image:
+  containerRegistry: ACR_REGISTRY
+  pullPolicy: IfNotPresent
+  service: quixplatform-ansible-builder
+  tag: INSTALLER_TAG
+imagePullSecret:
+  enabled: true
+  name: registrypullsecret
+licenseKey: QUIX_LICENSE_KEY
+platformVariables:
+  infrastructure:
+    storage:
+      class:
+        premiumRwo: managed-csi
+        standardRwo: managed-csi
+        standardRwx: azurefile-csi
+        minio: managed-csi
+      size:
+        gitea: 10Gi
+        internalRegistry: 10Gi
+        minio: 10Gi
+    containerCache:
+      enabled: false
+  platform:
+    subdomain: portal
+    customDomain: ENV_NAME.quix.io
+    samplesLibrary:
+      enabled: false
+    featureFlags:
+      allowDirectSignups: "true"
+      allowSocialSignups: "false"
+  portal:
+    bookADemoLink: ""
+  smtp:
+    host: ""
+  security:
+    provider: "auth0"
+    auth0:
+      genericAuth0Identity: "Quix-Dev"
+      tenantName: "quix-byoc"
+      tenantRegion: "eu"
+  ingress:
+    serviceType: LoadBalancer
+    certClusterIssuerCreate: "true"
+  kafka:
+    streaming:
+      instances:
+      - adminAuthSaslMechanism: ScramSha512
+        adminAuthSecurityMode: SaslSsl
+        adminBrokerList: kafka-streaming-ENV_NAME-kafka-streaming-ENV_NAME-pool-sha-0.quix-kafka-streaming-ENV_NAME.svc.cluster.local:9093
+        authSaslMechanism: SCRAM-SHA-512,PLAIN
+        brokerList: kafka-streaming-ENV_NAME-kafka-streaming-ENV_NAME-pool-sha-0.quix-kafka-streaming-ENV_NAME.svc.cluster.local:9093
+        brokerStorageSize: 10Gi
+        certType: self
+        chartProvider: strimzi
+        externalStartingPort: "30095"
+        extraVars:
+          certificate: {}
+          ingressRouteTcp: {}
+          kafka: {}
+          middleware: {}
+          namespace: {}
+          nodepool: {}
+        ipAllowList: ""
+        isDefault: true
+        kafkaExporterExpose: false
+        kafkaProvider: selfHosted
+        kafkaSubdomain: kafka-streaming-ENV_NAME
+        kafkaVersion: 3.9.0
+        listenerConfig:
+          name: sha
+          port: 9093
+        msk:
+          clusterArn: ""
+          kmsKeyId: ""
+        name: kafka-streaming-ENV_NAME
+        replicaCount: "1"
+        resources:
+          limits:
+            cpu: 2000m
+            memory: 4Gi
+          requests:
+            cpu: 500m
+            memory: 2Gi
+        securityMode: SaslSsl
+        storageClass: "managed-csi"
+        zookeeperServers: ""
+  mongo:
+    replicaCount: "1"
+    storageSize: 8Gi
+rolesFlags:
+  acmeEnabled: "true"
+  giteaEnabled: "true"
+  ingressEnabled: "true"
+  installLoadbalancer: "false"
+  internalRegistryEnabled: "false"
+  loggingEnabled: "true"
+  mongoDbEnabled: "true"
+  monitoringEnabled: "true"
+  platformEnabled: "true"
+  streamingKafkaEnableInternalHosting: "true"
+  streamingKafkaEnableStrimziOperator: "true"
+secrets:
+  secretName: platform-secrets
+  auth0:
+    clientId: AUTH0_CLIENT_ID
+    clientSecret: AUTH0_CLIENT_SECRET
+    cliAuth0ClientId: ""
+  dockerHub:
+    enabled: false
+  mongodb:
+    replicasetkey: HOOK_ALPHANUMERIC_16
+    rootAdminName: root
+    rootAdminPassword: HOOK_ALPHANUMERIC_16
+  gitea:
+    password: HOOK_ALPHANUMERIC_16
+    token: HOOK_ALPHANUMERIC_32
+  streamingKafka:
+    keystorePassword: HOOK_ALPHANUMERIC_16
+    saslPassword: HOOK_ALPHANUMERIC_16
+    saslUsername: HOOK_ALPHANUMERIC_16
+    truststorePassword: HOOK_ALPHANUMERIC_16
+  customerBuilds:
+    registry: "registry.ENV_NAME.quix.io"
+    registryPassword: HOOK_ALPHANUMERIC_16
+    registryUsername: HOOK_ALPHANUMERIC_16
+serviceAccount:
+  name: quix-agent-account
