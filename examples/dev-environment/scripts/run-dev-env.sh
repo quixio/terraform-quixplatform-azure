@@ -24,6 +24,9 @@
 #   AUTH0_CLIENT_SECRET   - Auth0 client secret
 #   BYOC_PATH             - Path to Infrastructure.BYOC repo
 #   BYOCVERSIONS_DIR      - Path to Infrastructure.BYOCVersions repo
+#   AWS_ACCESS_KEY_ID     - AWS access key for Route53 (ACME DNS-01)
+#   AWS_SECRET_ACCESS_KEY - AWS secret key for Route53 (ACME DNS-01)
+#   AWS_HOSTED_ZONE_ID    - Route53 hosted zone ID for quix.io
 #
 # Optional Environment Variables:
 #   LOCATION              - Azure region (default: westeurope)
@@ -96,13 +99,13 @@ parse_args() {
         usage
     fi
 
-    if ! [[ "$ENV_NAME" =~ ^dev[1-5]$ ]]; then
-        log_error "env-name must be one of: dev1, dev2, dev3, dev4, dev5"
+    if ! [[ "$ENV_NAME" =~ ^(fox|owl|lynx|puma|wolf)$ ]]; then
+        log_error "env-name must be one of: fox, owl, lynx, puma, wolf"
         exit 1
     fi
 
-    if ! [[ "$ACTION" =~ ^(create|deploy|destroy|status)$ ]]; then
-        log_error "action must be one of: create, deploy, destroy, status"
+    if ! [[ "$ACTION" =~ ^(create|deploy|reset|destroy|status)$ ]]; then
+        log_error "action must be one of: create, deploy, reset, destroy, status"
         exit 1
     fi
 }
@@ -140,7 +143,7 @@ validate_create_vars() {
 validate_deploy_vars() {
     validate_create_vars
     local missing=()
-    for var in AUTH0_CLIENT_ID AUTH0_CLIENT_SECRET BYOC_PATH; do
+    for var in AUTH0_CLIENT_ID AUTH0_CLIENT_SECRET BYOC_PATH AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_HOSTED_ZONE_ID; do
         if [[ -z "${!var:-}" ]]; then
             missing+=("$var")
         fi
@@ -256,6 +259,26 @@ action_deploy() {
     action_status_cluster "$cluster_context"
 }
 
+action_reset() {
+    log_section "Resetting Dev Environment: $ENV_NAME"
+    validate_deploy_vars
+
+    get_credentials
+
+    local context="aks-quix-${ENV_NAME}-admin"
+
+    log "Deleting all quix namespaces..."
+    kubectl --context="$context" get ns --no-headers -o custom-columns=":metadata.name" \
+        | grep "^quix" \
+        | xargs -I{} kubectl --context="$context" delete ns {} --ignore-not-found
+
+    log "Creating fresh quix namespace..."
+    kubectl --context="$context" create ns quix
+
+    log_success "Cluster wiped, running fresh deploy..."
+    action_deploy
+}
+
 action_destroy() {
     log_section "Destroying Dev Environment: $ENV_NAME"
 
@@ -306,7 +329,7 @@ action_status() {
     printf "%-8s %-25s %-15s %-10s\n" "ENV" "RESOURCE GROUP" "LOCATION" "STATUS"
     printf "%-8s %-25s %-15s %-10s\n" "---" "--------------" "--------" "------"
 
-    for slot in dev1 dev2 dev3 dev4 dev5; do
+    for slot in fox owl lynx puma wolf; do
         local rg_name="rg-quix-${slot}"
         local match
         match=$(echo "$envs" | jq -r ".[] | select(.name==\"$rg_name\") | .location // empty" 2>/dev/null || echo "")
@@ -321,7 +344,7 @@ action_status() {
     echo ""
 
     # For active environments, try to get pod status
-    for slot in dev1 dev2 dev3 dev4 dev5; do
+    for slot in fox owl lynx puma wolf; do
         local rg_name="rg-quix-${slot}"
         local cluster_name="aks-quix-${slot}"
 
@@ -434,6 +457,9 @@ generate_values() {
         -e "s|QUIX_LICENSE_KEY|${QUIX_LICENSE_KEY}|g" \
         -e "s|AUTH0_CLIENT_ID|${AUTH0_CLIENT_ID}|g" \
         -e "s|AUTH0_CLIENT_SECRET|${AUTH0_CLIENT_SECRET}|g" \
+        -e "s|AWS_ACCESS_KEY_ID|${AWS_ACCESS_KEY_ID}|g" \
+        -e "s|AWS_SECRET_ACCESS_KEY|${AWS_SECRET_ACCESS_KEY}|g" \
+        -e "s|AWS_HOSTED_ZONE_ID|${AWS_HOSTED_ZONE_ID}|g" \
         -e "s|INSTALLER_TAG|${INSTALLER_TAG}|g" \
         "$template_file" > "$values_file"
 
@@ -450,6 +476,7 @@ validate_tools
 case "$ACTION" in
     create)  action_create ;;
     deploy)  action_deploy ;;
+    reset)   action_reset ;;
     destroy) action_destroy ;;
     status)  action_status ;;
 esac

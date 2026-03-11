@@ -63,7 +63,7 @@ module "aks" {
     system = {
       name       = "system"
       type       = "system"
-      node_count = 2
+      node_count = 1
       vm_size    = var.system_node_vm_size
     }
     workload = {
@@ -71,7 +71,6 @@ module "aks" {
       type       = "user"
       node_count = var.workload_node_count
       vm_size    = var.workload_node_vm_size
-      priority   = "Spot"
     }
   }
 
