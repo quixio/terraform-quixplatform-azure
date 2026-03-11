@@ -231,6 +231,10 @@ action_deploy() {
 
     local cluster_context="aks-quix-${ENV_NAME}-admin"
 
+    # Ensure quix namespace exists
+    kubectl --context="$cluster_context" create ns quix --dry-run=client -o yaml \
+        | kubectl --context="$cluster_context" apply -f -
+
     # Generate values file
     generate_values
 
