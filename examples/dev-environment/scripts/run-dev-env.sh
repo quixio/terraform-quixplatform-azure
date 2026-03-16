@@ -286,34 +286,47 @@ action_reset() {
 action_destroy() {
     log_section "Destroying Dev Environment: $ENV_NAME"
 
-    cd "$TF_DIR"
-    tf_init
+    local rg="rg-quix-${ENV_NAME}"
 
-    local tfvars
-    tfvars=$(tf_vars_file)
+    # Use az group delete instead of terraform destroy.
+    # Terraform destroy takes 40+ min for AKS node pools, which exceeds the
+    # OIDC token lifetime (~10 min) causing auth failures mid-destroy.
+    # az group delete is a single API call that returns quickly with --no-wait.
 
-    local max_retries=3
-    local retry=0
+    if ! az group show --name "$rg" &>/dev/null 2>&1; then
+        log "Resource group $rg does not exist, nothing to destroy"
+    else
+        log "Deleting resource group $rg..."
+        az group delete --name "$rg" --yes --no-wait
+        log "Waiting for resource group deletion to complete..."
+        az group wait --deleted --name "$rg" --timeout 1800 2>/dev/null || true
 
-    while [[ $retry -lt $max_retries ]]; do
-        if terraform destroy \
-            -input=false \
-            -var-file="$tfvars" \
-            -auto-approve 2>&1; then
-            log_success "Environment $ENV_NAME destroyed"
-            return 0
+        if az group show --name "$rg" &>/dev/null 2>&1; then
+            log_error "Resource group $rg still exists after waiting"
+            exit 1
         fi
+        log_success "Resource group $rg deleted"
+    fi
 
-        retry=$((retry + 1))
-        if [[ $retry -lt $max_retries ]]; then
-            log_warn "Destroy failed, retrying ($retry/$max_retries)..."
-            sleep 30
-        fi
-    done
+    # Clean up terraform state blob
+    local tfstate_key="${ENV_NAME}.tfstate"
+    local storage_account="quixtfstate"
+    local container="dev-environments"
 
-    log_error "Failed to destroy $ENV_NAME after $max_retries attempts"
-    log_error "Manual cleanup required: rg-quix-${ENV_NAME}"
-    exit 1
+    log "Cleaning up terraform state: ${storage_account}/${container}/${tfstate_key}"
+    if az storage blob show --account-name "$storage_account" --container-name "$container" \
+        --name "$tfstate_key" &>/dev/null 2>&1; then
+        # Break any active lease before deleting
+        az storage blob lease break --account-name "$storage_account" --container-name "$container" \
+            --blob-name "$tfstate_key" &>/dev/null 2>&1 || true
+        az storage blob delete --account-name "$storage_account" --container-name "$container" \
+            --name "$tfstate_key"
+        log_success "Terraform state deleted"
+    else
+        log "No terraform state found for $ENV_NAME"
+    fi
+
+    log_success "Environment $ENV_NAME destroyed"
 }
 
 action_status() {
