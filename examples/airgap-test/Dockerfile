@@ -76,6 +76,12 @@ RUN curl -fsSL "https://get.helm.sh/helm-v${HELM_VERSION}-linux-amd64.tar.gz" -o
     && rm -rf /tmp/helm.tar.gz /tmp/linux-amd64 \
     && chmod +x /usr/local/bin/helm
 
+# Install AWS CLI v2 (for Route53 DNS updates in dev environments)
+RUN curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscliv2.zip \
+    && unzip -q /tmp/awscliv2.zip -d /tmp \
+    && /tmp/aws/install \
+    && rm -rf /tmp/awscliv2.zip /tmp/aws
+
 # Install crane (container registry tool - used to extract files from installer image)
 ARG CRANE_VERSION=0.20.3
 RUN curl -fsSL "https://github.com/google/go-containerregistry/releases/download/v${CRANE_VERSION}/go-containerregistry_Linux_x86_64.tar.gz" \

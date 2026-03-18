@@ -257,6 +257,9 @@ action_deploy() {
 
     log_success "BYOC deployment complete for $ENV_NAME"
 
+    # Update DNS if AWS creds are available
+    update_route53_dns "$cluster_context"
+
     # Run healthcheck
     action_status_cluster "$cluster_context"
 }
@@ -413,6 +416,88 @@ action_status_cluster() {
         log "  Helm releases: $releases"
     fi
     echo ""
+}
+
+################################################################################
+# DNS
+################################################################################
+
+update_route53_dns() {
+    local context="$1"
+    local domain="${ENV_NAME}.quix.io"
+
+    # Skip if AWS creds not available
+    if [[ -z "${AWS_ACCESS_KEY_ID:-}" || -z "${AWS_SECRET_ACCESS_KEY:-}" || -z "${AWS_HOSTED_ZONE_ID:-}" ]]; then
+        log_warn "AWS credentials not set, skipping Route53 DNS update"
+        return 0
+    fi
+
+    if ! command -v aws &>/dev/null; then
+        log_warn "aws CLI not available, skipping Route53 DNS update"
+        return 0
+    fi
+
+    # Get LoadBalancer IP from traefik service
+    local lb_ip
+    lb_ip=$(kubectl --context="$context" get svc -n quix-ingress-traefik quix-traefik \
+        -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "")
+
+    if [[ -z "$lb_ip" ]]; then
+        log_warn "Could not get LoadBalancer IP, skipping DNS update"
+        return 0
+    fi
+
+    log "LoadBalancer IP: $lb_ip"
+
+    # Check current DNS record
+    local current_ip
+    current_ip=$(aws route53 list-resource-record-sets \
+        --hosted-zone-id "$AWS_HOSTED_ZONE_ID" \
+        --query "ResourceRecordSets[?Name=='\\*.${domain}.' && Type=='A'].ResourceRecords[0].Value" \
+        --output text 2>/dev/null || echo "")
+
+    if [[ "$current_ip" == "$lb_ip" ]]; then
+        log "DNS already correct: *.${domain} -> $lb_ip"
+        return 0
+    fi
+
+    log "Updating Route53: *.${domain} -> $lb_ip (was: ${current_ip:-unset})"
+
+    # Upsert both wildcard and apex A records
+    local change_batch
+    change_batch=$(cat <<ENDJSON
+{
+  "Changes": [
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "*.${domain}",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [{"Value": "$lb_ip"}]
+      }
+    },
+    {
+      "Action": "UPSERT",
+      "ResourceRecordSet": {
+        "Name": "${domain}",
+        "Type": "A",
+        "TTL": 300,
+        "ResourceRecords": [{"Value": "$lb_ip"}]
+      }
+    }
+  ]
+}
+ENDJSON
+)
+
+    if aws route53 change-resource-record-sets \
+        --hosted-zone-id "$AWS_HOSTED_ZONE_ID" \
+        --change-batch "$change_batch" > /dev/null 2>&1; then
+        log_success "DNS updated: *.${domain} + ${domain} -> $lb_ip"
+    else
+        log_warn "Failed to update Route53 DNS (non-fatal)"
+    fi
 }
 
 ################################################################################
