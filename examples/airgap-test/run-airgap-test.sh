@@ -437,9 +437,8 @@ precheck_registry() {
     done
 
     # --- Platform image version checks (from container_versions.yaml) ---
-    # These are non-fatal: the fat installer has versions baked in that may
-    # differ from what container_versions.yaml reports. Missing platform
-    # images are logged as warnings, not errors.
+    # The fat installer bakes charts but NOT container images. Images must
+    # exist in the airgap registry at the exact tags specified.
     local cv_file=""
     if [[ -n "$BYOCVERSIONS_DIR" && -f "$BYOCVERSIONS_DIR/container_versions.yaml" ]]; then
         cv_file="$BYOCVERSIONS_DIR/container_versions.yaml"
@@ -467,29 +466,30 @@ precheck_registry() {
                 continue
             fi
 
-            # Check version but track separately (non-fatal)
             local tags
             tags=$(az acr repository show-tags --name "$acr_name" --repository "$image_name" --output tsv 2>/dev/null)
             if echo "$tags" | grep -qx "$prev_tag"; then
                 log "  ${GREEN}[OK]${NC} $image_name:$prev_tag"
                 passed=$((passed + 1))
             elif [[ -z "$tags" ]]; then
-                log "  ${YELLOW}[WARN]${NC} $image_name (repo not found)"
+                log "  ${RED}[FAIL]${NC} $image_name (repo not found)"
                 platform_warnings+=("$image_name (repo missing)")
+                failed=$((failed + 1))
             else
                 local latest
                 latest=$(echo "$tags" | sort -V | tail -1)
-                log "  ${YELLOW}[WARN]${NC} $image_name:$prev_tag (latest: $latest)"
+                log "  ${RED}[FAIL]${NC} $image_name:$prev_tag not found (latest: $latest)"
                 platform_warnings+=("$image_name:$prev_tag (latest in registry: $latest)")
+                failed=$((failed + 1))
             fi
         done
 
         if [[ ${#platform_warnings[@]} -gt 0 ]]; then
-            log_warn "Platform image version mismatches (non-fatal):"
+            log_error "Platform images missing from registry:"
             for item in "${platform_warnings[@]}"; do
                 echo "  - $item"
             done
-            log_warn "The fat installer may use different versions - install can still succeed."
+            log_error "Mirror the required tags before running airgap test."
         fi
     else
         log_warn "container_versions.yaml not found - skipping platform image version checks"
@@ -513,12 +513,14 @@ precheck_registry() {
     echo ""
     log "Registry check: ${passed} passed, ${failed} failed"
 
-    if [[ ${#missing_items[@]} -gt 0 ]]; then
-        log_error "Missing artifacts in ${acr_registry}:"
-        for item in "${missing_items[@]}"; do
-            echo "  - $item"
-        done
-        log_error "These must be mirrored to the registry before deployment."
+    if [[ $failed -gt 0 ]]; then
+        if [[ ${#missing_items[@]} -gt 0 ]]; then
+            log_error "Missing infrastructure artifacts in ${acr_registry}:"
+            for item in "${missing_items[@]}"; do
+                echo "  - $item"
+            done
+        fi
+        log_error "Registry pre-check failed: $failed missing artifacts. Mirror them before deployment."
         return 1
     fi
 
