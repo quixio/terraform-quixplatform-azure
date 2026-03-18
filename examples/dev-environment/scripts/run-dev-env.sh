@@ -220,12 +220,10 @@ action_deploy() {
     log_section "Deploying Quix BYOC to: $ENV_NAME"
     validate_deploy_vars
 
-    # Check if cluster exists, create if not
-    local rg="rg-quix-${ENV_NAME}"
-    if ! az group show --name "$rg" &>/dev/null; then
-        log "Cluster does not exist yet, creating..."
-        action_create
-    fi
+    # Always run terraform apply to ensure cluster is fully provisioned.
+    # This handles both fresh creation and partial provisioning (e.g. spot
+    # eviction during previous create left the RG but not all node pools).
+    action_create
 
     get_credentials
 
