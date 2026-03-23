@@ -206,14 +206,19 @@ validate_prerequisites() {
 
 # Infrastructure images (repo existence only - versions come from BYOC roles).
 # Platform images (workspace-service, portal-api, etc.) are checked with exact
-# tags via PLATFORM_IMAGE_VERSIONS above.
+# tags via PLATFORM_IMAGE_VERSIONS below.
 REQUIRED_IMAGES=(
+    # BYOC installer
     "quixplatform-ansible-builder"
+
+    # cert-manager
     "jetstack/cert-manager-controller"
     "jetstack/cert-manager-webhook"
     "jetstack/cert-manager-cainjector"
     "jetstack/trust-manager"
     "jetstack/cert-manager-package-debian"
+
+    # Ingress / data / monitoring
     "traefik/traefik"
     "bitnami/mongodb"
     "strimzi/operator"
@@ -222,6 +227,16 @@ REQUIRED_IMAGES=(
     "prometheus/prometheus"
     "grafana/loki"
     "bitnami/minio"
+
+    # Quix helpers / operators
+    "container-cache-operator"
+    "quix-environment-operator"
+    "keycloak-configurator"
+    "ide-python-agent"
+    "quixbackup"
+    "s3cleaner"
+    "pvc-du-exporter"
+    "library/docker"
 )
 
 # Infrastructure chart -> version mappings. Each entry:
@@ -247,6 +262,7 @@ CHART_VERSION_SOURCES=(
 # Tags are extracted from container_versions.yaml (sourced from BYOCVersions).
 # The image names come from the "service" field in platform_values.yaml.j2.
 PLATFORM_IMAGE_VERSIONS=(
+    # Core platform services (image shares tag with component key)
     "users|authapi"
     "users|userservice"
     "build|buildservice"
@@ -263,25 +279,59 @@ PLATFORM_IMAGE_VERSIONS=(
     "portal_backend|portal-api-notifications"
     "portal_backend|portal-library-api"
     "admin_ui|admin-ui"
-    "datalake_api|datalake-tester-api"
     "workspace|workspace-service"
     "telemetry_client|telemetry-client"
+
+    # Datalake services (image-only, no chart - deployed at runtime)
+    "datalake_api|datalake-api"
+    "datalake_api|datalake-tester-api"
+    "managed_service_datalake_sink|datalakesink"
+    "managed_service_datalake_replay|datalakereplayapi"
+    "managed_service_dynamic_configuration|dynamicconfigurationservice"
+    "managed_service_dynamic_configuration|dynamic-configuration-ui"
+
+    # Workspace subcontainers (pulled by workspace-service at runtime)
+    "workspace_services_streaming_reader|streamingreaderhttp"
 )
 
 # Charts where we only check repo existence (version comes from dynamic config
 # or container_versions.yaml and is harder to extract statically).
 REQUIRED_CHARTS=(
+    # Platform manager (orchestrator)
     "helm/quixplatform-manager"
+
+    # Core platform service charts
     "helm/workspace-service"
     "helm/deployments-service"
+    "helm/deployments-ide-api"
+    "helm/deployments-logs-api"
+    "helm/deployments-metrics-signalr"
+    "helm/deployments-monitoring-service"
     "helm/portal-api"
     "helm/portal"
+    "helm/portal-api-notifications"
+    "helm/portal-library-api"
     "helm/admin-ui"
-    "helm/streaming-reader"
+    "helm/build-service"
+    "helm/user-service"
+    "helm/auth-api"
+    "helm/notifications-api"
     "helm/git-api"
+    "helm/git-tester-api"
+    "helm/datalake-tester-api"
+    "helm/telemetry-client"
+
+    # Workspace subcontainer charts (fetched by workspace-service at runtime)
+    "helm/streaming-reader"
+
+    # Operators and helpers
     "helm/quix-environment-operator"
     "helm/container-cache"
+    "helm/pod-status-watcher-service"
+    "helm/annotation-transmuter-webhook"
+    "helm/watchdog"
     "helm/keycloak"
+    "helm/quixbackup"
 )
 
 # Extract a version string from a BYOC Ansible versions.yaml file.
