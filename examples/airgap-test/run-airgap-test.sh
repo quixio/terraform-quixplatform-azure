@@ -204,9 +204,10 @@ validate_prerequisites() {
 # Registry Pre-check (fail fast before provisioning infrastructure)
 ################################################################################
 
-# Infrastructure images (repo existence only - versions come from BYOC roles).
-# Platform images (workspace-service, portal-api, etc.) are checked with exact
-# tags via PLATFORM_IMAGE_VERSIONS below.
+# Infrastructure images - fallback list for repo existence checks when
+# repomirror configs (vendor-artifacts.json, quix-platform.json) cannot be
+# extracted from the installer image. When configs ARE available, exact tags
+# are verified instead of just repo existence.
 REQUIRED_IMAGES=(
     # BYOC installer
     "quixplatform-ansible-builder"
@@ -362,7 +363,7 @@ extract_byoc_version() {
 ################################################################################
 
 extract_container_versions() {
-    log "Extracting container_versions.yaml from installer image..."
+    log "Extracting version metadata from installer image..."
 
     local image="${ACR_REGISTRY}/quixplatform-ansible-builder:${INSTALLER_TAG}"
     local versions_dir
@@ -376,26 +377,44 @@ extract_container_versions() {
         return 0
     fi
 
-    # Extract just container_versions.yaml from the flattened image filesystem.
-    # crane export streams the image as a tar; we pass the exact path as a
-    # positional argument to tar (GNU tar on Mariner - no --include flag).
-    local target_path="app/ansible-baked/assets/versions/container_versions.yaml"
+    # Extract version metadata from the flattened image filesystem.
+    # crane export streams the image as a tar; we pass exact paths as
+    # positional arguments to tar (GNU tar on Mariner - no --include flag).
+    local baked="app/ansible-baked"
+    local target_path="${baked}/assets/versions/container_versions.yaml"
+    local repomirror_vendor="${baked}/scripts/repomirror/config/vendor-artifacts.json"
+    local repomirror_quix="${baked}/scripts/repomirror/config/quix-platform.json"
     log "  Image: $image"
-    log "  Target: $target_path"
+    log "  Extracting: container_versions.yaml, vendor-artifacts.json, quix-platform.json"
 
     local crane_err
     crane_err=$(mktemp)
     if crane export "$image" - 2>"$crane_err" \
-        | tar xf - -C "$versions_dir" "$target_path" 2>/dev/null; then
+        | tar xf - -C "$versions_dir" \
+            "$target_path" \
+            "$repomirror_vendor" \
+            "$repomirror_quix" 2>/dev/null; then
 
         local extracted="$versions_dir/$target_path"
         if [[ -f "$extracted" ]]; then
-            BYOCVERSIONS_DIR="$versions_dir/app/ansible-baked/assets/versions"
+            BYOCVERSIONS_DIR="$versions_dir/${baked}/assets/versions"
             export BYOCVERSIONS_DIR
             log_success "Extracted container_versions.yaml"
-            rm -f "$crane_err"
-            return 0
         fi
+
+        # Export repomirror config directory for infrastructure image tag checks
+        local repomirror_dir="$versions_dir/${baked}/scripts/repomirror/config"
+        if [[ -f "$repomirror_dir/vendor-artifacts.json" && -f "$repomirror_dir/quix-platform.json" ]]; then
+            REPOMIRROR_CONFIG_DIR="$repomirror_dir"
+            export REPOMIRROR_CONFIG_DIR
+            log_success "Extracted repomirror configs (vendor-artifacts.json, quix-platform.json)"
+        else
+            log_warn "Repomirror configs not found in installer image"
+            log_warn "Infrastructure image tag checks will fall back to repo existence"
+        fi
+
+        rm -f "$crane_err"
+        return 0
     fi
 
     # Log why it failed
@@ -404,8 +423,8 @@ extract_container_versions() {
     fi
     rm -f "$crane_err"
 
-    log_warn "Could not extract container_versions.yaml from installer image"
-    log_warn "Platform image version checks will be skipped"
+    log_warn "Could not extract version metadata from installer image"
+    log_warn "Platform image and infrastructure tag checks will be skipped/degraded"
 }
 
 precheck_registry() {
@@ -468,6 +487,47 @@ precheck_registry() {
             missing_items+=("$repo:$version (latest in registry: $latest)")
             return 1
         fi
+    }
+
+    # Check helper: verify exact image tags from a repomirror JSON config.
+    # Parses artifacts with type "image" or "both" that have explicit "tags"
+    # arrays, then checks each tag exists in the registry.
+    check_repomirror_image_tags() {
+        local config_file="$1"
+        local config_name
+        config_name=$(basename "$config_file")
+
+        if [[ ! -f "$config_file" ]]; then
+            log_warn "  Config not found: $config_file"
+            return 1
+        fi
+
+        # Extract image path and tag pairs from the JSON config.
+        # For type "both": image path is in .target.image_path
+        # For type "image": image path is in .target.path
+        local entries
+        entries=$(jq -r '
+            .artifacts[]
+            | select(.type == "image" or .type == "both")
+            | select(.tags)
+            | (.target.image_path // .target.path) as $path
+            | .tags[] as $tag
+            | "\($path)|\($tag)"
+        ' "$config_file" 2>/dev/null)
+
+        if [[ -z "$entries" ]]; then
+            log_warn "  No image entries with explicit tags in $config_name"
+            return 0
+        fi
+
+        local count=0
+        while IFS='|' read -r image_path tag; do
+            [[ -z "$image_path" || -z "$tag" ]] && continue
+            check_chart_version "$image_path" "$tag" || true
+            count=$((count + 1))
+        done <<< "$entries"
+
+        log "  Checked $count image:tag pairs from $config_name"
     }
 
     # --- Version-specific checks (infrastructure charts) ---
@@ -552,12 +612,23 @@ precheck_registry() {
         check_repo_exists "$chart" || true
     done
 
-    # --- Container images (infrastructure - repo existence only) ---
+    # --- Container images (infrastructure - exact tag verification) ---
     echo ""
-    log "Checking infrastructure images..."
-    for image in "${REQUIRED_IMAGES[@]}"; do
-        check_repo_exists "$image" || true
-    done
+    if [[ -n "${REPOMIRROR_CONFIG_DIR:-}" ]]; then
+        log "Checking infrastructure image tags (from installer repomirror configs)..."
+        check_repomirror_image_tags "$REPOMIRROR_CONFIG_DIR/vendor-artifacts.json" || true
+        check_repomirror_image_tags "$REPOMIRROR_CONFIG_DIR/quix-platform.json" || true
+    elif [[ -d "$BYOC_PATH/scripts/repomirror/config" ]]; then
+        log "Checking infrastructure image tags (from BYOC checkout - installer extraction unavailable)..."
+        check_repomirror_image_tags "$BYOC_PATH/scripts/repomirror/config/vendor-artifacts.json" || true
+        check_repomirror_image_tags "$BYOC_PATH/scripts/repomirror/config/quix-platform.json" || true
+    else
+        log_warn "No repomirror configs available - falling back to repo existence check"
+        log "Checking infrastructure images..."
+        for image in "${REQUIRED_IMAGES[@]}"; do
+            check_repo_exists "$image" || true
+        done
+    fi
 
     # Summary
     echo ""
@@ -984,6 +1055,7 @@ wait_for_installer_job() {
 # rules to only what the running platform actually needs:
 #   - ACR francecentral (release registry)
 #   - Storage francecentral (ACR blob backend)
+#   - Storage regional (Azure File CSI PVC mounts - port 445 SMB)
 #   - AKS control plane (regional)
 #   - DNS, NTP, AAD, VNet internal
 #
@@ -1008,7 +1080,9 @@ lockdown_network() {
         "AllowMCR"                 # MCR service tag - system images already cached
         "AllowMCR-CDN"             # 20.0.0.0/8 + Akamai - the biggest hole
         "AllowACR-WestEurope"      # Release ACR is in francecentral, not here
-        "AllowStorage-WestEurope"  # Only needed during bootstrap
+        # NOTE: AllowStorage-WestEurope is NOT removed. Azure File CSI
+        # (azurefile-csi) needs persistent port 445 (SMB) access to the
+        # regional Storage service tag for PVC mounts after install.
     )
 
     for rule in "${rules_to_remove[@]}"; do

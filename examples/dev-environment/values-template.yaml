@@ -82,7 +82,7 @@ platformVariables:
   ingress:
     serviceType: LoadBalancer
     certClusterIssuerCreate: "true"
-    certManagerNamespaceToUse: "quix-cert-manager"
+    certManagerNamespaceToUse: ""
   kafka:
     streaming:
       instances:
