@@ -745,13 +745,16 @@ generate_byoc_values() {
         return 1
     fi
 
-    log "Generating CA-signed TLS certificate for *.${domain}..."
+    # Kafka brokers advertise on a sub-subdomain (kafkaSubdomain.domain), so
+    # the cert needs a wildcard SAN for that level too.
+    local kafka_subdomain="kafka-streaming-airgap"
+    log "Generating CA-signed TLS certificate for *.${domain} + *.${kafka_subdomain}.${domain}..."
     openssl genrsa -out "$cert_dir/tls.key" 2048 2>/dev/null
     openssl req -new -key "$cert_dir/tls.key" -out "$cert_dir/tls.csr" \
         -subj "/CN=*.${domain}/O=Quix Airgap Test" 2>/dev/null
     # Use extfile for SAN (compatible with OpenSSL 1.1.1 in the runner container)
     cat > "$cert_dir/ext.cnf" <<EXTEOF
-subjectAltName=DNS:*.${domain},DNS:${domain}
+subjectAltName=DNS:*.${domain},DNS:${domain},DNS:*.${kafka_subdomain}.${domain}
 EXTEOF
     openssl x509 -req -in "$cert_dir/tls.csr" \
         -CA "$ca_dir/ca.crt" -CAkey "$ca_dir/ca.key" -CAcreateserial \
@@ -781,7 +784,7 @@ EXTEOF
         "$template_file" > "$values_file"
 
     log "Installer image: ${ACR_REGISTRY}/quixplatform-ansible-builder:${INSTALLER_TAG}"
-    log_success "CA-signed TLS certificate for *.${domain} injected into values"
+    log_success "CA-signed TLS certificate for *.${domain} + *.${kafka_subdomain}.${domain} injected into values"
 
     log_success "Generated: $values_file"
 }
