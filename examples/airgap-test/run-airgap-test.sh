@@ -505,11 +505,15 @@ precheck_registry() {
         # Extract image path and tag pairs from the JSON config.
         # For type "both": image path is in .target.image_path
         # For type "image": image path is in .target.path
+        # Skip quixplatform-ansible-builder - the installer image is already
+        # validated by the pipeline using it, and airgap tags have a suffix
+        # (e.g. 1.6.9-0.1.20260313644-airgap) not listed in the config.
         local entries
         entries=$(jq -r '
             .artifacts[]
             | select(.type == "image" or .type == "both")
             | select(.tags)
+            | select((.target.image_path // .target.path) != "quixplatform-ansible-builder")
             | (.target.image_path // .target.path) as $path
             | .tags[] as $tag
             | "\($path)|\($tag)"
