@@ -43,7 +43,7 @@ global:
   privateDockerRegistryPassword: CHANGEME
   privateDockerRegistryUrl: ACR_REGISTRY
   privateDockerRegistryUsername: CHANGEME
-  rootDomain: airgap-test.internal
+  rootDomain: internal
   tier: BringYourOwnCluster
   # Helm chart OCI path prefix within the registry.
   # Charts live at ACR_REGISTRY/helm/<chart-name>
@@ -83,8 +83,8 @@ platformVariables:
     containerCache:
       enabled: false
   platform:
-    subdomain: portal
-    customDomain: airgap-test.internal
+    subdomain: airgap-test
+    customDomain: internal
     # Disable samples library - it tries to clone from github.com
     samplesLibrary:
       enabled: false
