@@ -109,11 +109,14 @@ platformVariables:
   kafka:
     streaming:
       instances:
+      # brokerList/adminBrokerList are intentionally omitted: for internal Strimzi hosting
+      # roles/include_vars/tasks/compute_broker_lists.yaml always overwrites them from
+      # kafkaSubdomain + subdomain + rootDomain (+ useFlatDomain), so any value here is ignored.
+      # useFlatDomain: "true" produces broker FQDNs that match the wildcard cert SANs
+      # (kafka-0-<kafkaSubdomain>.<subdomain>.<rootDomain>).
       - adminAuthSaslMechanism: ScramSha512
         adminAuthSecurityMode: SaslSsl
-        adminBrokerList: kafka-streaming-airgap-kafka-streaming-airgap-pool-sha-0.quix-kafka-streaming-airgap.svc.cluster.local:9093
         authSaslMechanism: SCRAM-SHA-512,PLAIN
-        brokerList: kafka-streaming-airgap-kafka-streaming-airgap-pool-sha-0.quix-kafka-streaming-airgap.svc.cluster.local:9093
         brokerStorageSize: 10Gi
         certType: self
         chartProvider: strimzi
@@ -148,6 +151,7 @@ platformVariables:
             memory: 2Gi
         securityMode: SaslSsl
         storageClass: "managed-csi"
+        useFlatDomain: "true"
         zookeeperServers: ""
   mongo:
     replicaCount: "1"
@@ -180,7 +184,11 @@ secrets:
     rootAdminPassword: HOOK_ALPHANUMERIC_16
   gitea:
     password: HOOK_ALPHANUMERIC_16
-    token: HOOK_ALPHANUMERIC_32
+    # Leave gitea.token empty: the quixplatform.generatePassword helper would otherwise
+    # synthesise a 32-char random string for platform-secrets.gitea-token, which is
+    # rejected by Gitea's API (real PATs are 40-char hex). staging-united renders it as
+    # "" and consumers work fine.
+    token: ""
   streamingKafka:
     keystorePassword: HOOK_ALPHANUMERIC_16
     saslPassword: HOOK_ALPHANUMERIC_16
