@@ -95,17 +95,8 @@ platformVariables:
   # Disable external service references unreachable in airgap
   portal:
     bookADemoLink: ""
-  # SMTP disabled for airgap: host: "" is the documented off switch (see chart
-  # values.yaml smtp.host comment). Zero out the rest too so chart defaults
-  # (smtp.sendgrid.net, welcome@quix.io) don't leak into platform-variables.
-  # With SMTP off, password-reset links are returned in the API response.
   smtp:
     host: ""
-    port: ""
-    sslEnabled: "false"
-    username: ""
-    defaultSenderAddress: ""
-    defaultSenderName: ""
   security:
     provider: "auth0"
     auth0:
