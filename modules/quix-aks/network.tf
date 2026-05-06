@@ -28,7 +28,7 @@ resource "azurerm_subnet" "nodes" {
   resource_group_name  = local.vnet_rg_effective
   virtual_network_name = coalesce(try(azurerm_virtual_network.this[0].name, null), try(data.azurerm_virtual_network.existing[0].name, null), var.vnet_name)
   address_prefixes     = [var.nodes_subnet_cidr]
-  service_endpoints    = ["Microsoft.Storage"]
+  service_endpoints    = var.nodes_subnet_service_endpoints
 }
 
 data "azurerm_subnet" "existing" {
@@ -72,7 +72,7 @@ resource "azurerm_nat_gateway_public_ip_association" "this" {
 }
 
 resource "azurerm_subnet_nat_gateway_association" "nodes" {
-  count          = (var.create_nodes_subnet || var.create_nat) ? 1 : 0
+  count          = (var.create_nat || var.nat_gateway_id != null) ? 1 : 0
   subnet_id      = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
   nat_gateway_id = coalesce(try(azurerm_nat_gateway.this[0].id, null), var.nat_gateway_id)
 }

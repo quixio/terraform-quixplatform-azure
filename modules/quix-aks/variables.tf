@@ -99,6 +99,12 @@ variable "nodes_subnet_cidr" {
   default     = null
 }
 
+variable "nodes_subnet_service_endpoints" {
+  description = "Azure service endpoints to enable on the nodes subnet"
+  type        = list(string)
+  default     = ["Microsoft.Storage"]
+}
+
 
 variable "create_vnet" {
   description = "Whether to create the VNet (set false when using external vnet_id)"
