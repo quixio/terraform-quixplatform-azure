@@ -76,6 +76,29 @@ module "quix_aks" {
 
 **Note:** When using an existing Private DNS Zone (Option 3), the module automatically assigns the `Private DNS Zone Contributor` role to the AKS cluster identity.
 
+### Ephemeral OS disks
+
+Each pool in `node_pools` can optionally use Ephemeral OS disks via `os_disk_type` and `os_disk_size_gb`. Both fields are optional: when omitted, the pool keeps the AKS default (`Managed`), so adding these fields does **not** change existing pools (no diff on `terraform plan`).
+
+```hcl
+node_pools = {
+  platform = {
+    name            = "platform"
+    type            = "user"
+    node_count      = 3
+    vm_size         = "Standard_E4ds_v5"
+    os_disk_type    = "Ephemeral" # Managed (default) | Ephemeral
+    os_disk_size_gb = 150         # optional; provider computes a default if unset
+    labels          = { "quix.io/node-purpose" = "platform-services" }
+  }
+}
+```
+
+Notes:
+
+- `os_disk_type` and `os_disk_size_gb` are **ForceNew**: switching an existing pool to/from Ephemeral recreates it. Changing the **system** pool's disk type recreates the **entire cluster** — only change it on a fresh cluster or during a planned rebuild.
+- An Ephemeral OS disk must fit in the VM's cache or temp disk. For `Standard_E4ds_v5` the cache is ~100 GiB, so `os_disk_size_gb = 150` is placed on the temp disk (~150 GiB). If you hit a placement error, lower the size to ≤ 100 (fits in cache) or pick a VM size with a larger cache.
+
 ## Tiered Storage module (tiered-storage)
 
 Azure Blob Storage with workload identity federation for Quix tiered storage.
