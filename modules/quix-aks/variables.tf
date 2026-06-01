@@ -121,17 +121,19 @@ variable "create_nodes_subnet" {
 variable "node_pools" {
   description = "Map of additional node pools (include a 'system' pool to override default)"
   type = map(object({
-    name           = string
-    type           = string # system | user
-    node_count     = number
-    vm_size        = string
-    max_pods       = optional(number)
-    taints         = optional(list(string))
-    labels         = optional(map(string))
-    mode           = optional(string)        # system | user (overrides type)
-    priority       = optional(string)        # Regular | Spot (default: Regular). Note: system pools cannot use Spot.
-    eviction_policy = optional(string)       # Delete | Deallocate (only for Spot, default: Delete)
-    spot_max_price = optional(number)        # Max price for Spot VMs, -1 = up to on-demand price (default: -1)
+    name            = string
+    type            = string # system | user
+    node_count      = number
+    vm_size         = string
+    max_pods        = optional(number)
+    os_disk_type    = optional(string) # Managed | Ephemeral. If unset, AKS default (Managed) is used.
+    os_disk_size_gb = optional(number) # If unset, provider/AKS computes the default for the vm_size.
+    taints          = optional(list(string))
+    labels          = optional(map(string))
+    mode            = optional(string) # system | user (overrides type)
+    priority        = optional(string) # Regular | Spot (default: Regular). Note: system pools cannot use Spot.
+    eviction_policy = optional(string) # Delete | Deallocate (only for Spot, default: Delete)
+    spot_max_price  = optional(number) # Max price for Spot VMs, -1 = up to on-demand price (default: -1)
   }))
   default = {}
   validation {

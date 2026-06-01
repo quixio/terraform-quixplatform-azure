@@ -17,11 +17,13 @@ resource "azurerm_kubernetes_cluster" "this" {
   workload_identity_enabled = var.workload_identity_enabled
 
   default_node_pool {
-    name           = local.system_pool_name
-    node_count     = local.system_pool.node_count
-    vm_size        = local.system_pool.vm_size
-    vnet_subnet_id = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
-    max_pods       = 250
+    name            = local.system_pool_name
+    node_count      = local.system_pool.node_count
+    vm_size         = local.system_pool.vm_size
+    vnet_subnet_id  = coalesce(try(azurerm_subnet.nodes[0].id, null), try(data.azurerm_subnet.existing[0].id, null))
+    max_pods        = 250
+    os_disk_type    = local.system_pool.os_disk_type    # null => AKS default (Managed)
+    os_disk_size_gb = local.system_pool.os_disk_size_gb # null => provider default
 
     upgrade_settings {
       max_surge                     = "10%"
@@ -75,6 +77,8 @@ resource "azurerm_kubernetes_cluster_node_pool" "additional" {
   node_taints           = each.value.taints
   node_labels           = each.value.labels
   max_pods              = 250
+  os_disk_type          = each.value.os_disk_type    # null => AKS default (Managed)
+  os_disk_size_gb       = each.value.os_disk_size_gb # null => provider default
   orchestrator_version  = var.kubernetes_version
 
   # Spot instance configuration (only for User pools)
